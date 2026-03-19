@@ -9,4 +9,4 @@ bucket_name = "consia-avatars"
 [[d1_databases]]
 binding = "DB"
 database_name = "consia_d1"
-database_id = "PONER_ID_REAL"
+database_id = "1b1010cf-2247-4ba3-903a-4da26323bab3"
