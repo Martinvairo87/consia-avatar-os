@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CONSIA CORE PRO</title>
+<title>CONSIA AVATAR PRO</title>
 
 <style>
 body{
@@ -11,59 +11,40 @@ body{
   background:#000;
   color:#00ffc8;
   font-family:monospace;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  height:100vh;
-}
-
-.container{
   text-align:center;
-  width:90%;
-  max-width:600px;
 }
-
-.circle{
-  width:240px;
-  height:240px;
-  border-radius:50%;
-  background:radial-gradient(circle,#00ffc8,#002f2a);
-  margin:auto;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size:24px;
-  transition:0.2s;
+canvas{
+  margin-top:40px;
+  background:#001f1b;
+  border-radius:20px;
+  box-shadow:0 0 30px #00ffc844;
 }
-
 input{
-  width:100%;
+  width:80%;
   padding:12px;
-  margin:6px 0;
+  margin:8px;
   background:#001f1b;
   border:1px solid #00ffc8;
   color:#00ffc8;
   border-radius:8px;
 }
-
 button{
-  margin:5px;
-  padding:12px 18px;
+  padding:12px 16px;
+  margin:6px;
+  background:#00ffc8;
   border:none;
   border-radius:8px;
-  background:#00ffc8;
-  color:#000;
   font-weight:bold;
 }
-
-.log{
-  margin-top:15px;
-  padding:10px;
+#status{margin-top:10px}
+#log{
+  margin:10px auto;
+  width:80%;
+  height:140px;
+  overflow:auto;
   background:#001f1b;
   border-radius:8px;
-  height:150px;
-  overflow:auto;
-  font-size:12px;
+  padding:10px;
   text-align:left;
 }
 </style>
@@ -71,182 +52,193 @@ button{
 
 <body>
 
-<div class="container">
-
-<div class="circle" id="avatar">CONSIA</div>
+<canvas id="avatar" width="300" height="300"></canvas>
 
 <div id="status">READY</div>
 
 <input id="api" value="https://consia-api.jbdkb7r94d.workers.dev">
-<input id="msg" placeholder="Hablá con CONSIA...">
+<input id="msg" placeholder="Decime algo...">
 
-<div>
-<button onclick="hablar()">🎤 HABLAR</button>
-<button onclick="enviar()">🚀 ENVIAR</button>
-<button onclick="autoListen()">🧠 AUTO</button>
+<br>
+<button onclick="send()">🚀 ENVIAR</button>
+<button onclick="mic()">🎤 HABLAR</button>
+<button onclick="autoMode()">🧠 AUTO</button>
 <button onclick="test()">⚡ TEST</button>
-</div>
 
-<div class="log" id="log"></div>
-
-</div>
+<div id="log"></div>
 
 <script>
-
 // =====================
-// CORE
+// CORE UI
 // =====================
-function api(){
-  return document.getElementById("api").value;
-}
-
+function api(){ return document.getElementById("api").value; }
 function log(t){
-  document.getElementById("log").innerHTML += t+"<br>";
+  const el = document.getElementById("log");
+  el.innerHTML += t + "<br>";
+  el.scrollTop = el.scrollHeight;
+}
+function setStatus(t){ document.getElementById("status").innerText = t; }
+
+// =====================
+// AVATAR CANVAS
+// =====================
+const canvas = document.getElementById("avatar");
+const ctx = canvas.getContext("2d");
+let mouth = "S";
+
+function draw(){
+  ctx.clearRect(0,0,300,300);
+
+  // cabeza
+  ctx.fillStyle = "#00ffc8";
+  ctx.beginPath();
+  ctx.arc(150,150,120,0,Math.PI*2);
+  ctx.fill();
+
+  // ojos
+  ctx.fillStyle = "#000";
+  ctx.beginPath(); ctx.arc(110,120,10,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(190,120,10,0,Math.PI*2); ctx.fill();
+
+  // boca segun visema
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+
+  if(mouth==="A") ctx.ellipse(150,200,30,20,0,0,Math.PI*2);
+  else if(mouth==="E") ctx.ellipse(150,200,35,10,0,0,Math.PI*2);
+  else if(mouth==="I") ctx.ellipse(150,200,10,25,0,0,Math.PI*2);
+  else if(mouth==="O") ctx.ellipse(150,200,20,20,0,0,Math.PI*2);
+  else if(mouth==="U") ctx.ellipse(150,200,15,18,0,0,Math.PI*2);
+  else if(mouth==="M") ctx.rect(120,190,60,10);
+  else if(mouth==="F") ctx.rect(120,195,60,6);
+  else ctx.rect(120,195,60,8);
+
+  ctx.fill();
 }
 
-function setStatus(t){
-  document.getElementById("status").innerText = t;
+setInterval(draw, 30);
+
+// =====================
+// MOTOR VOZ CONSIA (WebAudio)
+// =====================
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function speak(text, visemes){
+  // síntesis simple propia (beep modulation)
+  let t = audioCtx.currentTime;
+
+  visemes.forEach((v,i)=>{
+    setTimeout(()=> mouth = v, i*80);
+
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.value = 180 + (v.charCodeAt(0)%5)*40;
+
+    gain.gain.setValueAtTime(0.08, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t+0.07);
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.start(t);
+    osc.stop(t+0.08);
+
+    t += 0.08;
+  });
+
+  setTimeout(()=> mouth="S", visemes.length*80);
 }
 
 // =====================
-// VOZ CONSIA
+// API
 // =====================
-function speak(text){
-
-  if(speechSynthesis.speaking){
-    speechSynthesis.cancel();
-  }
-
-  let u = new SpeechSynthesisUtterance(text);
-
-  u.lang = "es-AR";
-  u.rate = 1;
-  u.pitch = 1;
-
-  let voices = speechSynthesis.getVoices();
-  let v = voices.find(x=>x.lang.includes("es"));
-
-  if(v) u.voice = v;
-
-  speechSynthesis.speak(u);
-
-  animateTalking();
-}
-
-// =====================
-// ANIMACIÓN
-// =====================
-function animateTalking(){
-  let a = document.getElementById("avatar");
-
-  let i = setInterval(()=>{
-    a.style.transform = "scale(" + (1 + Math.random()*0.08) + ")";
-  },100);
-
-  setTimeout(()=>{
-    clearInterval(i);
-    a.style.transform="scale(1)";
-  },2000);
-}
-
-// =====================
-// TEST API
-// =====================
-async function test(){
-  try{
-    let r = await fetch(api()+"/v1/status");
-    let j = await r.json();
-    setStatus("API OK");
-    log("STATUS OK");
-  }catch(e){
-    setStatus("ERROR");
-    log("ERROR "+e);
-  }
-}
-
-// =====================
-// ENVIAR
-// =====================
-async function enviar(){
-
-  let msg = document.getElementById("msg").value;
+async function send(){
+  const msg = document.getElementById("msg").value;
   if(!msg) return;
 
   setStatus("THINKING...");
-  log("YOU: "+msg);
+  log("YOU: " + msg);
 
   try{
-    let r = await fetch(api()+"/v1/realtime/chat",{
+    const r = await fetch(api()+"/v1/realtime/chat",{
       method:"POST",
-      headers:{
-        "Content-Type":"application/json"
-      },
+      headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ message: msg })
     });
 
-    let j = await r.json();
+    const j = await r.json();
 
-    log("CONSIA: "+j.reply);
+    log("CONSIA: " + j.reply);
 
-    speak(j.reply);
+    speak(j.reply, j.visemes);
 
     setStatus("READY");
 
   }catch(e){
     setStatus("ERROR");
-    log("ERROR "+e);
+    log("ERROR " + e);
   }
 }
 
 // =====================
-// VOZ INPUT
+// MIC INPUT
 // =====================
-function hablar(){
-
-  let r = new webkitSpeechRecognition();
+function mic(){
+  const r = new webkitSpeechRecognition();
   r.lang="es-AR";
 
-  r.onstart = ()=> setStatus("LISTENING...");
-
   r.onresult = (e)=>{
-    let t = e.results[0][0].transcript;
+    const t = e.results[0][0].transcript;
     document.getElementById("msg").value = t;
-    enviar();
+    send();
   };
-
-  r.onend = ()=> setStatus("READY");
 
   r.start();
 }
 
 // =====================
-// AUTO LOOP (CONSIA LIVE)
+// AUTO MODE (loop)
 // =====================
-let listening = false;
+let auto=false;
 
-function autoListen(){
+function autoMode(){
+  if(auto) return;
+  auto = true;
 
-  if(listening) return;
+  function loop(){
+    if(!auto) return;
 
-  listening = true;
+    const r = new webkitSpeechRecognition();
+    r.lang="es-AR";
 
-  let r = new webkitSpeechRecognition();
-  r.lang="es-AR";
+    r.onresult = (e)=>{
+      const t = e.results[0][0].transcript;
+      document.getElementById("msg").value = t;
+      send();
+    };
 
-  r.onresult = (e)=>{
-    let t = e.results[0][0].transcript;
-    document.getElementById("msg").value = t;
-    enviar();
-  };
+    r.onend = ()=> setTimeout(loop, 400);
+    r.start();
+  }
 
-  r.onend = ()=>{
-    listening = false;
-    setTimeout(autoListen, 400);
-  };
-
-  r.start();
+  loop();
 }
 
+// =====================
+// TEST
+// =====================
+async function test(){
+  try{
+    const r = await fetch(api()+"/v1/status");
+    const j = await r.json();
+    log("STATUS OK");
+    setStatus("API OK");
+  }catch(e){
+    log("ERROR "+e);
+  }
+}
 </script>
 
 </body>
