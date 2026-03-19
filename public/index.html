@@ -1,16 +1,16 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>CONSIA AVATAR OS</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CONSIA CORE</title>
 
 <style>
-body {
+body{
   margin:0;
   background:#000;
   color:#00ffc8;
-  font-family: monospace;
+  font-family:monospace;
   display:flex;
   align-items:center;
   justify-content:center;
@@ -24,16 +24,22 @@ body {
 }
 
 .circle{
-  width:220px;
-  height:220px;
+  width:240px;
+  height:240px;
   border-radius:50%;
+  background:radial-gradient(circle,#00ffc8,#002f2a);
   margin:auto;
-  background: radial-gradient(circle, #00ffc8, #003f3a);
   display:flex;
   align-items:center;
   justify-content:center;
-  font-size:22px;
-  margin-bottom:20px;
+  font-size:24px;
+  animation:pulse 2s infinite;
+}
+
+@keyframes pulse{
+  0%{transform:scale(1)}
+  50%{transform:scale(1.05)}
+  100%{transform:scale(1)}
 }
 
 input{
@@ -61,7 +67,7 @@ button{
   padding:10px;
   background:#001f1b;
   border-radius:8px;
-  height:120px;
+  height:140px;
   overflow:auto;
   font-size:12px;
   text-align:left;
@@ -73,19 +79,17 @@ button{
 
 <div class="container">
 
-<div class="circle">CONSIA</div>
+<div class="circle" id="avatar">CONSIA</div>
 
-<div id="status">Listo</div>
+<div id="status">READY</div>
 
-<input id="api" placeholder="API BASE" value="https://consia-api.jbdkb7r94d.workers.dev">
-<input id="key" placeholder="OWNER KEY">
-<input id="msg" placeholder="Escribí algo...">
+<input id="api" value="https://consia-api.jbdkb7r94d.workers.dev">
+<input id="msg" placeholder="Hablá con CONSIA...">
 
 <div>
 <button onclick="hablar()">🎤 HABLAR</button>
 <button onclick="enviar()">🚀 ENVIAR</button>
-<button onclick="voz()">🔊 VOZ</button>
-<button onclick="test()">⚡ TEST API</button>
+<button onclick="test()">⚡ TEST</button>
 </div>
 
 <div class="log" id="log"></div>
@@ -93,6 +97,13 @@ button{
 </div>
 
 <script>
+
+// =====================
+// CORE CONFIG
+// =====================
+function api(){
+  return document.getElementById("api").value;
+}
 
 function log(t){
   document.getElementById("log").innerHTML += t+"<br>";
@@ -102,6 +113,28 @@ function setStatus(t){
   document.getElementById("status").innerText = t;
 }
 
+// =====================
+// VOICE OUTPUT (CONSIA ENGINE)
+// =====================
+function speak(text){
+
+  let u = new SpeechSynthesisUtterance(text);
+
+  u.lang = "es-AR";
+  u.rate = 1;
+  u.pitch = 1;
+
+  let voices = speechSynthesis.getVoices();
+  let v = voices.find(x=>x.lang.includes("es"));
+
+  if(v) u.voice = v;
+
+  speechSynthesis.speak(u);
+}
+
+// =====================
+// API TEST
+// =====================
 async function test(){
   try{
     let r = await fetch(api()+"/v1/status");
@@ -114,57 +147,55 @@ async function test(){
   }
 }
 
-function api(){
-  return document.getElementById("api").value;
-}
-
-function key(){
-  return document.getElementById("key").value;
-}
-
+// =====================
+// SEND
+// =====================
 async function enviar(){
-  setStatus("Pensando...");
-  log("Enviando...");
+
+  let msg = document.getElementById("msg").value;
+
+  if(!msg) return;
+
+  setStatus("THINKING...");
+  log("YOU: "+msg);
 
   try{
+
     let r = await fetch(api()+"/v1/realtime/chat",{
       method:"POST",
       headers:{
-        "Content-Type":"application/json",
-        "x-owner-key": key()
+        "Content-Type":"application/json"
       },
-      body: JSON.stringify({
-        message: document.getElementById("msg").value
-      })
+      body: JSON.stringify({ message: msg })
     });
 
     let j = await r.json();
 
-    log("CONSIA: "+j.reply);
-    hablarTexto(j.reply);
-    setStatus("Listo");
+    let reply = j.reply;
+
+    log("CONSIA: "+reply);
+
+    speak(reply);
+
+    animate();
+
+    setStatus("READY");
 
   }catch(e){
-    setStatus("API ERROR");
+    setStatus("ERROR");
     log("ERROR "+e);
   }
 }
 
-function hablarTexto(t){
-  let u = new SpeechSynthesisUtterance(t);
-  speechSynthesis.speak(u);
-}
-
+// =====================
+// VOICE INPUT
+// =====================
 function hablar(){
-  navigator.mediaDevices.getUserMedia({audio:true})
-  .then(()=>{
-    log("Mic activo");
-  });
-}
 
-function voz(){
   let r = new webkitSpeechRecognition();
-  r.lang="es-AR";
+  r.lang = "es-AR";
+
+  r.onstart = ()=> setStatus("LISTENING...");
 
   r.onresult = (e)=>{
     let t = e.results[0][0].transcript;
@@ -172,7 +203,18 @@ function voz(){
     enviar();
   };
 
+  r.onend = ()=> setStatus("READY");
+
   r.start();
+}
+
+// =====================
+// ANIMATION
+// =====================
+function animate(){
+  let a = document.getElementById("avatar");
+  a.style.transform = "scale(1.15)";
+  setTimeout(()=> a.style.transform="scale(1)",300);
 }
 
 </script>
