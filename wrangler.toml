@@ -1,15 +1,3 @@
 name = "consia-avatar-os"
 main = "worker.js"
 compatibility_date = "2026-01-01"
-
-[[d1_databases]]
-binding = "DB"
-database_name = "consia_db"
-database_id = "UkhkjhjkGYJGVTHVYJGNUYB87678568765&/%(/&%(/&%)/(&)(/HYtyiuyfgnugyyug&/%%(&/H%TUYIGUYGI"
-
-[[r2_buckets]]
-binding = "AVATAR_BUCKET"
-bucket_name = "consia-avatars"
-
-[vars]
-R2_PUBLIC_URL = "https://pub-REEMPLAZAR_ACCOUNT_ID.r2.dev"
