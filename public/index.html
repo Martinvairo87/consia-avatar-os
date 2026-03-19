@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CONSIA AVATAR</title>
+
+<style>
+body {
+  margin:0;
+  background:#000;
+  color:#00ffe1;
+  font-family:monospace;
+}
+
+#container {
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  height:100vh;
+}
+
+#avatar {
+  width:300px;
+  height:300px;
+  border-radius:50%;
+  background:radial-gradient(circle,#00ffe1,#001f1f);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:22px;
+  animation:pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%{transform:scale(1);}
+  50%{transform:scale(1.05);}
+  100%{transform:scale(1);}
+}
+
+#text {
+  margin-top:20px;
+  text-align:center;
+}
+
+button {
+  margin-top:20px;
+  padding:15px;
+  border:none;
+  border-radius:10px;
+  background:#00ffe1;
+  color:black;
+  font-weight:bold;
+}
+
+</style>
+</head>
+
+<body>
+
+<div id="container">
+  <div id="avatar">CONSIA</div>
+  <div id="text">Listo para hablar...</div>
+  <button onclick="startListening()">🎤 HABLAR</button>
+</div>
+
+<script>
+
+//////////////////////////////////////
+// CONFIG
+//////////////////////////////////////
+
+const API_BASE = "https://consia-api.jbdkb7r94d.workers.dev";
+
+/*
+PEGÁ TU OWNER KEY ACÁ
+*/
+const OWNER_KEY = "TU_OWNER_KEY";
+
+
+//////////////////////////////////////
+// VOICE RECOGNITION
+//////////////////////////////////////
+
+const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+recognition.lang = "es-AR";
+recognition.continuous = false;
+
+function startListening(){
+  recognition.start();
+  document.getElementById("text").innerText = "Escuchando...";
+}
+
+recognition.onresult = async (event)=>{
+  const text = event.results[0][0].transcript;
+  document.getElementById("text").innerText = "Vos: " + text;
+
+  const response = await fetch(API_BASE + "/v1/memory/search",{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "x-owner-key":jkhkuhYGTYFYT76567578&(/&(/&()/&9
+    },
+    body: JSON.stringify({query:text})
+  });
+
+  const data = await response.json();
+
+  let reply = "No encontré respuesta";
+
+  if(data.results && data.results.length > 0){
+    reply = data.results[0].text;
+  }
+
+  speak(reply);
+};
+
+//////////////////////////////////////
+// TEXT TO SPEECH
+//////////////////////////////////////
+
+function speak(text){
+  const msg = new SpeechSynthesisUtterance(text);
+  msg.lang = "es-ES";
+  speechSynthesis.speak(msg);
+
+  document.getElementById("text").innerText = "CONSIA: " + text;
+}
+
+</script>
+
+</body>
+</html>
