@@ -1,56 +1,181 @@
-export default {
-  async fetch(req, env) {
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CONSIA AVATAR OS</title>
 
-    const cors = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers": "*",
-      "Access-Control-Allow-Methods": "*"
-    };
+<style>
+body {
+  margin:0;
+  background:#000;
+  color:#00ffc8;
+  font-family: monospace;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  height:100vh;
+}
 
-    // Preflight (CORS)
-    if (req.method === "OPTIONS") {
-      return new Response("ok", { headers: cors });
-    }
+.container{
+  text-align:center;
+  width:90%;
+  max-width:600px;
+}
 
-    const url = new URL(req.url);
+.circle{
+  width:220px;
+  height:220px;
+  border-radius:50%;
+  margin:auto;
+  background: radial-gradient(circle, #00ffc8, #003f3a);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:22px;
+  margin-bottom:20px;
+}
 
-    // =========================
-    // STATUS
-    // =========================
-    if (url.pathname === "/v1/status") {
-      return new Response(JSON.stringify({
-        ok: true,
-        system: "CONSIA",
-        status: "ONLINE"
-      }), {
-        headers: { ...cors, "Content-Type": "application/json" }
-      });
-    }
+input{
+  width:100%;
+  padding:12px;
+  margin:6px 0;
+  background:#001f1b;
+  border:1px solid #00ffc8;
+  color:#00ffc8;
+  border-radius:8px;
+}
 
-    // =========================
-    // CHAT REALTIME
-    // =========================
-    if (url.pathname === "/v1/realtime/chat") {
+button{
+  margin:5px;
+  padding:12px 18px;
+  border:none;
+  border-radius:8px;
+  background:#00ffc8;
+  color:#000;
+  font-weight:bold;
+}
 
-      const key = req.headers.get("x-owner-key");
+.log{
+  margin-top:15px;
+  padding:10px;
+  background:#001f1b;
+  border-radius:8px;
+  height:120px;
+  overflow:auto;
+  font-size:12px;
+  text-align:left;
+}
+</style>
+</head>
 
-      // (opcional por ahora)
-      // if (key !== env.OWNER_KEY) {
-      //   return new Response("Unauthorized", { status: 401, headers: cors });
-      // }
+<body>
 
-      const body = await req.json();
-      const message = body.message || "";
+<div class="container">
 
-      // RESPUESTA TEST (para validar)
-      return new Response(JSON.stringify({
-        ok: true,
-        reply: "CONSIA RESPONDE: " + message
-      }), {
-        headers: { ...cors, "Content-Type": "application/json" }
-      });
-    }
+<div class="circle">CONSIA</div>
 
-    return new Response("CONSIA API", { headers: cors });
+<div id="status">Listo</div>
+
+<input id="api" placeholder="API BASE" value="https://consia-api.jbdkb7r94d.workers.dev">
+<input id="key" placeholder="OWNER KEY">
+<input id="msg" placeholder="Escribí algo...">
+
+<div>
+<button onclick="hablar()">🎤 HABLAR</button>
+<button onclick="enviar()">🚀 ENVIAR</button>
+<button onclick="voz()">🔊 VOZ</button>
+<button onclick="test()">⚡ TEST API</button>
+</div>
+
+<div class="log" id="log"></div>
+
+</div>
+
+<script>
+
+function log(t){
+  document.getElementById("log").innerHTML += t+"<br>";
+}
+
+function setStatus(t){
+  document.getElementById("status").innerText = t;
+}
+
+async function test(){
+  try{
+    let r = await fetch(api()+"/v1/status");
+    let j = await r.json();
+    setStatus("API OK");
+    log("STATUS OK");
+  }catch(e){
+    setStatus("API ERROR");
+    log("ERROR "+e);
   }
-};
+}
+
+function api(){
+  return document.getElementById("api").value;
+}
+
+function key(){
+  return document.getElementById("key").value;
+}
+
+async function enviar(){
+  setStatus("Pensando...");
+  log("Enviando...");
+
+  try{
+    let r = await fetch(api()+"/v1/realtime/chat",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "x-owner-key": key()
+      },
+      body: JSON.stringify({
+        message: document.getElementById("msg").value
+      })
+    });
+
+    let j = await r.json();
+
+    log("CONSIA: "+j.reply);
+    hablarTexto(j.reply);
+    setStatus("Listo");
+
+  }catch(e){
+    setStatus("API ERROR");
+    log("ERROR "+e);
+  }
+}
+
+function hablarTexto(t){
+  let u = new SpeechSynthesisUtterance(t);
+  speechSynthesis.speak(u);
+}
+
+function hablar(){
+  navigator.mediaDevices.getUserMedia({audio:true})
+  .then(()=>{
+    log("Mic activo");
+  });
+}
+
+function voz(){
+  let r = new webkitSpeechRecognition();
+  r.lang="es-AR";
+
+  r.onresult = (e)=>{
+    let t = e.results[0][0].transcript;
+    document.getElementById("msg").value = t;
+    enviar();
+  };
+
+  r.start();
+}
+
+</script>
+
+</body>
+</html>
