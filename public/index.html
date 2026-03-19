@@ -1,234 +1,56 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CONSIA AVATAR PRO</title>
+export default {
+  async fetch(req, env) {
 
-<style>
-body{
-  margin:0;
-  background:#000;
-  color:#00ffe1;
-  font-family:monospace;
-}
-#app{
-  min-height:100vh;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  gap:16px;
-  padding:20px;
-}
+    const cors = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "*",
+      "Access-Control-Allow-Methods": "*"
+    };
 
-#avatar{
-  width:min(70vw,320px);
-  height:min(70vw,320px);
-  border-radius:50%;
-  background:radial-gradient(circle,#00ffe1,#001f1f);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size:22px;
-  animation:pulse 2s infinite;
-}
-
-@keyframes pulse{
-  0%{transform:scale(1)}
-  50%{transform:scale(1.06)}
-  100%{transform:scale(1)}
-}
-
-#status{
-  font-size:18px;
-  text-align:center;
-  min-height:30px;
-}
-
-input{
-  width:min(92vw,700px);
-  padding:14px;
-  border-radius:12px;
-  border:1px solid #00ffe144;
-  background:#081010;
-  color:#fff;
-}
-
-.row{
-  display:flex;
-  gap:10px;
-  flex-wrap:wrap;
-  justify-content:center;
-}
-
-button{
-  padding:14px 18px;
-  border:none;
-  border-radius:12px;
-  background:#00ffe1;
-  color:#000;
-  font-weight:bold;
-  cursor:pointer;
-}
-
-#log{
-  width:min(92vw,900px);
-  max-height:300px;
-  overflow:auto;
-  background:#051010;
-  border:1px solid #00ffe144;
-  border-radius:12px;
-  padding:12px;
-  white-space:pre-wrap;
-}
-</style>
-</head>
-
-<body>
-
-<div id="app">
-
-<div id="avatar">CONSIA</div>
-
-<div id="status">Sistema listo</div>
-
-<input id="api" value="https://consia-api.jbdkb7r94d.workers.dev">
-<input id="key" placeholder="PEGAR OWNER KEY">
-
-<input id="input" placeholder="Escribí o hablá">
-
-<div class="row">
-<button onclick="startMic()">🎤 HABLAR</button>
-<button onclick="send()">🚀 ENVIAR</button>
-<button onclick="testVoice()">🔊 VOZ</button>
-<button onclick="testAPI()">⚡ TEST API</button>
-</div>
-
-<div id="log"></div>
-
-</div>
-
-<script>
-const statusEl = document.getElementById("status");
-const logEl = document.getElementById("log");
-
-function log(msg){
-  console.log(msg);
-  logEl.innerText += msg + "\\n";
-}
-
-function setStatus(s){
-  statusEl.innerText = s;
-  log("[STATUS] " + s);
-}
-
-/* =========================
-   VOZ (SIEMPRE FUNCIONA)
-========================= */
-function speak(text){
-  if(!window.speechSynthesis){
-    setStatus("No hay voz");
-    return;
-  }
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "es-AR";
-  speechSynthesis.speak(u);
-}
-
-function testVoice(){
-  speak("CONSIA activo");
-}
-
-/* =========================
-   MIC (Safari-safe)
-========================= */
-async function startMic(){
-  try{
-    setStatus("Pidiendo mic...");
-    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-    setStatus("Mic activo");
-
-    // fallback simple (no STT)
-    speak("Micrófono activo. Decime y luego escribí si Safari no transcribe.");
-  }catch(e){
-    setStatus("Error mic: " + e.message);
-  }
-}
-
-/* =========================
-   API TEST
-========================= */
-async function testAPI(){
-  const api = document.getElementById("api").value;
-
-  try{
-    const r = await fetch(api + "/v1/status");
-    const d = await r.text();
-    setStatus("API OK");
-    log(d);
-  }catch(e){
-    setStatus("API ERROR");
-    log(e.message);
-  }
-}
-
-/* =========================
-   CHAT CONSIA
-========================= */
-async function send(){
-  const api = document.getElementById("api").value;
-  const key = document.getElementById("key").value;
-  const msg = document.getElementById("input").value;
-
-  if(!key){
-    setStatus("Falta OWNER KEY");
-    return;
-  }
-
-  if(!msg){
-    setStatus("Escribí algo");
-    return;
-  }
-
-  setStatus("Pensando...");
-  log("USER: " + msg);
-
-  try{
-    const res = await fetch(api + "/v1/realtime/chat",{
-      method:"POST",
-      headers:{
-        "Content-Type":"application/json",
-        "x-owner-key":key
-      },
-      body: JSON.stringify({
-        message: msg,
-        mode: "owner"
-      })
-    });
-
-    const data = await res.json();
-
-    if(!res.ok){
-      setStatus("Error API");
-      log(JSON.stringify(data));
-      return;
+    // Preflight (CORS)
+    if (req.method === "OPTIONS") {
+      return new Response("ok", { headers: cors });
     }
 
-    const reply = data.reply || "Sin respuesta";
+    const url = new URL(req.url);
 
-    setStatus("CONSIA respondió");
-    log("CONSIA: " + reply);
+    // =========================
+    // STATUS
+    // =========================
+    if (url.pathname === "/v1/status") {
+      return new Response(JSON.stringify({
+        ok: true,
+        system: "CONSIA",
+        status: "ONLINE"
+      }), {
+        headers: { ...cors, "Content-Type": "application/json" }
+      });
+    }
 
-    speak(reply);
+    // =========================
+    // CHAT REALTIME
+    // =========================
+    if (url.pathname === "/v1/realtime/chat") {
 
-  }catch(e){
-    setStatus("Error conexión");
-    log(e.message);
+      const key = req.headers.get("x-owner-key");
+
+      // (opcional por ahora)
+      // if (key !== env.OWNER_KEY) {
+      //   return new Response("Unauthorized", { status: 401, headers: cors });
+      // }
+
+      const body = await req.json();
+      const message = body.message || "";
+
+      // RESPUESTA TEST (para validar)
+      return new Response(JSON.stringify({
+        ok: true,
+        reply: "CONSIA RESPONDE: " + message
+      }), {
+        headers: { ...cors, "Content-Type": "application/json" }
+      });
+    }
+
+    return new Response("CONSIA API", { headers: cors });
   }
-}
-</script>
-
-</body>
-</html>
+};
