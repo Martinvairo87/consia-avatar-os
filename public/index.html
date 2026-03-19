@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CONSIA CORE</title>
+<title>CONSIA CORE PRO</title>
 
 <style>
 body{
@@ -33,13 +33,7 @@ body{
   align-items:center;
   justify-content:center;
   font-size:24px;
-  animation:pulse 2s infinite;
-}
-
-@keyframes pulse{
-  0%{transform:scale(1)}
-  50%{transform:scale(1.05)}
-  100%{transform:scale(1)}
+  transition:0.2s;
 }
 
 input{
@@ -67,7 +61,7 @@ button{
   padding:10px;
   background:#001f1b;
   border-radius:8px;
-  height:140px;
+  height:150px;
   overflow:auto;
   font-size:12px;
   text-align:left;
@@ -89,6 +83,7 @@ button{
 <div>
 <button onclick="hablar()">🎤 HABLAR</button>
 <button onclick="enviar()">🚀 ENVIAR</button>
+<button onclick="autoListen()">🧠 AUTO</button>
 <button onclick="test()">⚡ TEST</button>
 </div>
 
@@ -99,7 +94,7 @@ button{
 <script>
 
 // =====================
-// CORE CONFIG
+// CORE
 // =====================
 function api(){
   return document.getElementById("api").value;
@@ -114,9 +109,13 @@ function setStatus(t){
 }
 
 // =====================
-// VOICE OUTPUT (CONSIA ENGINE)
+// VOZ CONSIA
 // =====================
 function speak(text){
+
+  if(speechSynthesis.speaking){
+    speechSynthesis.cancel();
+  }
 
   let u = new SpeechSynthesisUtterance(text);
 
@@ -130,10 +129,28 @@ function speak(text){
   if(v) u.voice = v;
 
   speechSynthesis.speak(u);
+
+  animateTalking();
 }
 
 // =====================
-// API TEST
+// ANIMACIÓN
+// =====================
+function animateTalking(){
+  let a = document.getElementById("avatar");
+
+  let i = setInterval(()=>{
+    a.style.transform = "scale(" + (1 + Math.random()*0.08) + ")";
+  },100);
+
+  setTimeout(()=>{
+    clearInterval(i);
+    a.style.transform="scale(1)";
+  },2000);
+}
+
+// =====================
+// TEST API
 // =====================
 async function test(){
   try{
@@ -142,25 +159,23 @@ async function test(){
     setStatus("API OK");
     log("STATUS OK");
   }catch(e){
-    setStatus("API ERROR");
+    setStatus("ERROR");
     log("ERROR "+e);
   }
 }
 
 // =====================
-// SEND
+// ENVIAR
 // =====================
 async function enviar(){
 
   let msg = document.getElementById("msg").value;
-
   if(!msg) return;
 
   setStatus("THINKING...");
   log("YOU: "+msg);
 
   try{
-
     let r = await fetch(api()+"/v1/realtime/chat",{
       method:"POST",
       headers:{
@@ -171,13 +186,9 @@ async function enviar(){
 
     let j = await r.json();
 
-    let reply = j.reply;
+    log("CONSIA: "+j.reply);
 
-    log("CONSIA: "+reply);
-
-    speak(reply);
-
-    animate();
+    speak(j.reply);
 
     setStatus("READY");
 
@@ -188,12 +199,12 @@ async function enviar(){
 }
 
 // =====================
-// VOICE INPUT
+// VOZ INPUT
 // =====================
 function hablar(){
 
   let r = new webkitSpeechRecognition();
-  r.lang = "es-AR";
+  r.lang="es-AR";
 
   r.onstart = ()=> setStatus("LISTENING...");
 
@@ -209,12 +220,31 @@ function hablar(){
 }
 
 // =====================
-// ANIMATION
+// AUTO LOOP (CONSIA LIVE)
 // =====================
-function animate(){
-  let a = document.getElementById("avatar");
-  a.style.transform = "scale(1.15)";
-  setTimeout(()=> a.style.transform="scale(1)",300);
+let listening = false;
+
+function autoListen(){
+
+  if(listening) return;
+
+  listening = true;
+
+  let r = new webkitSpeechRecognition();
+  r.lang="es-AR";
+
+  r.onresult = (e)=>{
+    let t = e.results[0][0].transcript;
+    document.getElementById("msg").value = t;
+    enviar();
+  };
+
+  r.onend = ()=>{
+    listening = false;
+    setTimeout(autoListen, 400);
+  };
+
+  r.start();
 }
 
 </script>
