@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CONSIA AVATAR</title>
+<title>CONSIA AVATAR PRO</title>
+
 <style>
 body{
   margin:0;
@@ -11,17 +12,19 @@ body{
   color:#00ffe1;
   font-family:monospace;
 }
-#container{
+#app{
+  min-height:100vh;
   display:flex;
   flex-direction:column;
   align-items:center;
   justify-content:center;
-  min-height:100vh;
-  padding:24px;
+  gap:16px;
+  padding:20px;
 }
+
 #avatar{
-  width:min(70vw,300px);
-  height:min(70vw,300px);
+  width:min(70vw,320px);
+  height:min(70vw,320px);
   border-radius:50%;
   background:radial-gradient(circle,#00ffe1,#001f1f);
   display:flex;
@@ -29,177 +32,203 @@ body{
   justify-content:center;
   font-size:22px;
   animation:pulse 2s infinite;
-  text-align:center;
 }
+
 @keyframes pulse{
   0%{transform:scale(1)}
-  50%{transform:scale(1.05)}
+  50%{transform:scale(1.06)}
   100%{transform:scale(1)}
 }
-#text{
-  margin-top:20px;
+
+#status{
+  font-size:18px;
   text-align:center;
-  max-width:700px;
-  line-height:1.5;
+  min-height:30px;
 }
-.controls{
-  display:flex;
-  gap:12px;
-  flex-wrap:wrap;
-  justify-content:center;
-  margin-top:20px;
-}
-button{
-  padding:15px 18px;
-  border:none;
-  border-radius:10px;
-  background:#00ffe1;
-  color:black;
-  font-weight:bold;
-  cursor:pointer;
-}
+
 input{
-  margin-top:16px;
-  width:min(90vw,520px);
+  width:min(92vw,700px);
   padding:14px;
-  border-radius:10px;
+  border-radius:12px;
   border:1px solid #00ffe144;
   background:#081010;
   color:#fff;
 }
-small{
-  margin-top:12px;
-  color:#8ef7ea;
-  opacity:.8;
-  text-align:center;
-  max-width:700px;
+
+.row{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  justify-content:center;
+}
+
+button{
+  padding:14px 18px;
+  border:none;
+  border-radius:12px;
+  background:#00ffe1;
+  color:#000;
+  font-weight:bold;
+  cursor:pointer;
+}
+
+#log{
+  width:min(92vw,900px);
+  max-height:300px;
+  overflow:auto;
+  background:#051010;
+  border:1px solid #00ffe144;
+  border-radius:12px;
+  padding:12px;
+  white-space:pre-wrap;
 }
 </style>
 </head>
+
 <body>
-<div id="container">
-  <div id="avatar">CONSIA</div>
-  <div id="text">Listo para hablar...</div>
 
-  <input id="manualText" placeholder="Escribí acá si el micrófono no responde en Safari" />
+<div id="app">
 
-  <div class="controls">
-    <button onclick="startListening()">🎤 HABLAR</button>
-    <button onclick="sendManual()">📨 ENVIAR TEXTO</button>
-    <button onclick="testVoice()">🔊 PROBAR VOZ</button>
-  </div>
+<div id="avatar">CONSIA</div>
 
-  <small id="supportInfo"></small>
+<div id="status">Sistema listo</div>
+
+<input id="api" value="https://consia-api.jbdkb7r94d.workers.dev">
+<input id="key" placeholder="PEGAR OWNER KEY">
+
+<input id="input" placeholder="Escribí o hablá">
+
+<div class="row">
+<button onclick="startMic()">🎤 HABLAR</button>
+<button onclick="send()">🚀 ENVIAR</button>
+<button onclick="testVoice()">🔊 VOZ</button>
+<button onclick="testAPI()">⚡ TEST API</button>
+</div>
+
+<div id="log"></div>
+
 </div>
 
 <script>
-const API_BASE = "https://consia-api.jbdkb7r94d.workers.dev";
-const OWNER_KEY = "PEGAR_TU_OWNER_KEY_ACA";
+const statusEl = document.getElementById("status");
+const logEl = document.getElementById("log");
 
-const textEl = document.getElementById("text");
-const inputEl = document.getElementById("manualText");
-const supportInfoEl = document.getElementById("supportInfo");
-
-const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-let recognition = null;
-
-if (SpeechRecognitionClass) {
-  recognition = new SpeechRecognitionClass();
-  recognition.lang = "es-AR";
-  recognition.continuous = false;
-  recognition.interimResults = false;
-
-  recognition.onstart = () => {
-    textEl.innerText = "Escuchando...";
-  };
-
-  recognition.onresult = async (event) => {
-    const spoken = event.results?.[0]?.[0]?.transcript || "";
-    if (!spoken) {
-      textEl.innerText = "No entendí el audio.";
-      return;
-    }
-    textEl.innerText = "Vos: " + spoken;
-    await askConsia(spoken);
-  };
-
-  recognition.onerror = (event) => {
-    textEl.innerText = "Error de voz: " + (event.error || "desconocido");
-  };
-
-  recognition.onend = () => {
-    // no-op
-  };
-
-  supportInfoEl.innerText = "Reconocimiento de voz detectado. En Safari puede funcionar de forma parcial.";
-} else {
-  supportInfoEl.innerText = "Este navegador no soporta bien reconocimiento de voz web. Usá ENVIAR TEXTO o probá en Chrome.";
+function log(msg){
+  console.log(msg);
+  logEl.innerText += msg + "\\n";
 }
 
-async function startListening() {
-  if (!recognition) {
-    textEl.innerText = "Voz no disponible en este navegador. Usá ENVIAR TEXTO.";
+function setStatus(s){
+  statusEl.innerText = s;
+  log("[STATUS] " + s);
+}
+
+/* =========================
+   VOZ (SIEMPRE FUNCIONA)
+========================= */
+function speak(text){
+  if(!window.speechSynthesis){
+    setStatus("No hay voz");
     return;
   }
-  try {
-    recognition.start();
-  } catch (err) {
-    textEl.innerText = "No se pudo iniciar el micrófono: " + (err.message || err);
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "es-AR";
+  speechSynthesis.speak(u);
+}
+
+function testVoice(){
+  speak("CONSIA activo");
+}
+
+/* =========================
+   MIC (Safari-safe)
+========================= */
+async function startMic(){
+  try{
+    setStatus("Pidiendo mic...");
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    setStatus("Mic activo");
+
+    // fallback simple (no STT)
+    speak("Micrófono activo. Decime y luego escribí si Safari no transcribe.");
+  }catch(e){
+    setStatus("Error mic: " + e.message);
   }
 }
 
-async function sendManual() {
-  const text = inputEl.value.trim();
-  if (!text) {
-    textEl.innerText = "Escribí algo primero.";
+/* =========================
+   API TEST
+========================= */
+async function testAPI(){
+  const api = document.getElementById("api").value;
+
+  try{
+    const r = await fetch(api + "/v1/status");
+    const d = await r.text();
+    setStatus("API OK");
+    log(d);
+  }catch(e){
+    setStatus("API ERROR");
+    log(e.message);
+  }
+}
+
+/* =========================
+   CHAT CONSIA
+========================= */
+async function send(){
+  const api = document.getElementById("api").value;
+  const key = document.getElementById("key").value;
+  const msg = document.getElementById("input").value;
+
+  if(!key){
+    setStatus("Falta OWNER KEY");
     return;
   }
-  textEl.innerText = "Vos: " + text;
-  await askConsia(text);
-}
 
-async function askConsia(userText) {
-  try {
-    const response = await fetch(API_BASE + "/v1/realtime/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-owner-key": jkhkuhYGTYFYT76567578&(/&(/&()/&9
+  if(!msg){
+    setStatus("Escribí algo");
+    return;
+  }
+
+  setStatus("Pensando...");
+  log("USER: " + msg);
+
+  try{
+    const res = await fetch(api + "/v1/realtime/chat",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "x-owner-key":key
       },
       body: JSON.stringify({
-        message: userText,
+        message: msg,
         mode: "owner"
       })
     });
 
-    const data = await response.json();
+    const data = await res.json();
 
-    if (!response.ok || data.ok === false) {
-      textEl.innerText = "Error API: " + JSON.stringify(data);
+    if(!res.ok){
+      setStatus("Error API");
+      log(JSON.stringify(data));
       return;
     }
 
-    const reply = data.reply || "Sin respuesta.";
-    textEl.innerText = "CONSIA: " + reply;
+    const reply = data.reply || "Sin respuesta";
+
+    setStatus("CONSIA respondió");
+    log("CONSIA: " + reply);
+
     speak(reply);
-  } catch (err) {
-    textEl.innerText = "Fallo de conexión con CONSIA: " + (err.message || err);
+
+  }catch(e){
+    setStatus("Error conexión");
+    log(e.message);
   }
 }
-
-function speak(text) {
-  if (!("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
-  const msg = new SpeechSynthesisUtterance(text);
-  msg.lang = "es-AR";
-  msg.rate = 1.0;
-  msg.pitch = 1.0;
-  window.speechSynthesis.speak(msg);
-}
-
-function testVoice() {
-  speak("CONSIA activo y operativo.");
-}
 </script>
+
 </body>
 </html>
