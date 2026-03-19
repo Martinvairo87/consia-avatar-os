@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>CONSIA AVATAR PRO MAX</title>
+<title>CONSIA VOICE NEURAL V2</title>
 <style>
   body{
     margin:0;
@@ -15,7 +15,7 @@
   .wrap{
     max-width:900px;
     margin:0 auto;
-    padding:24px 16px 40px;
+    padding:20px 16px 40px;
   }
   canvas{
     margin-top:16px;
@@ -51,7 +51,7 @@
   #log{
     margin:14px auto 0;
     width:min(92vw,760px);
-    height:180px;
+    height:190px;
     overflow:auto;
     background:#001f1b;
     border-radius:12px;
@@ -76,7 +76,7 @@
       <button onclick="mic()">🎤 HABLAR</button>
       <button onclick="toggleAuto()">🧠 AUTO</button>
       <button onclick="testApi()">⚡ TEST</button>
-      <button onclick="stopVoice()">⏹ STOP</button>
+      <button onclick="stopAll()">⏹ STOP</button>
     </div>
 
     <div id="log"></div>
@@ -93,7 +93,8 @@
   let mouth = "S";
   let autoMode = false;
   let recognizer = null;
-  let speaking = false;
+  let currentAudio = null;
+  let lipsyncTimer = null;
 
   function apiBase() {
     return apiEl.value.trim().replace(/\/+$/, "");
@@ -118,24 +119,20 @@
   function drawAvatar() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // halo
     ctx.fillStyle = "#002f2a";
     ctx.beginPath();
     ctx.arc(180, 180, 150, 0, Math.PI * 2);
     ctx.fill();
 
-    // head
     ctx.fillStyle = "#00ffc8";
     ctx.beginPath();
     ctx.arc(180, 175, 125, 0, Math.PI * 2);
     ctx.fill();
 
-    // eyes
     ctx.fillStyle = "#000";
     ctx.beginPath(); ctx.arc(130, 140, 11, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(230, 140, 11, 0, Math.PI * 2); ctx.fill();
 
-    // brows
     ctx.lineWidth = 4;
     ctx.strokeStyle = "#003f3a";
     ctx.beginPath();
@@ -143,7 +140,6 @@
     ctx.moveTo(212, 112); ctx.lineTo(252, 118);
     ctx.stroke();
 
-    // mouth by viseme
     ctx.fillStyle = "#000";
     ctx.beginPath();
 
@@ -158,65 +154,41 @@
     } else if (mouth === "U") {
       ctx.ellipse(180, 235, 14, 18, 0, 0, Math.PI * 2);
     } else if (mouth === "M") {
-      ctx.roundRect(145, 228, 70, 12, 6);
+      roundRect(ctx, 145, 228, 70, 12, 6);
     } else if (mouth === "F") {
-      ctx.roundRect(146, 232, 68, 8, 4);
+      roundRect(ctx, 146, 232, 68, 8, 4);
     } else {
-      ctx.roundRect(145, 232, 70, 8, 4);
+      roundRect(ctx, 145, 232, 70, 8, 4);
     }
 
     ctx.fill();
   }
 
-  setInterval(drawAvatar, 30);
-
-  function speakText(text, visemes) {
-    stopVoice();
-
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.lang = "es-AR";
-    utter.rate = 1;
-    utter.pitch = 1;
-
-    const voices = window.speechSynthesis.getVoices();
-    const preferred =
-      voices.find(v => v.lang === "es-AR") ||
-      voices.find(v => v.lang.startsWith("es")) ||
-      null;
-    if (preferred) utter.voice = preferred;
-
-    speaking = true;
-
-    let i = 0;
-    const timer = setInterval(() => {
-      if (i < visemes.length && speaking) {
-        mouth = visemes[i];
-        i++;
-      } else {
-        clearInterval(timer);
-        mouth = "S";
-      }
-    }, 80);
-
-    utter.onend = () => {
-      speaking = false;
-      mouth = "S";
-    };
-
-    utter.onerror = () => {
-      speaking = false;
-      mouth = "S";
-    };
-
-    window.speechSynthesis.speak(utter);
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
   }
 
-  function stopVoice() {
-    speaking = false;
+  setInterval(drawAvatar, 30);
+
+  function stopAll() {
     mouth = "S";
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio = null;
     }
+    if (lipsyncTimer) {
+      clearInterval(lipsyncTimer);
+      lipsyncTimer = null;
+    }
+    try {
+      if (recognizer) recognizer.stop();
+    } catch {}
+    setStatus(autoMode ? "AUTO READY" : "READY");
   }
 
   async function testApi() {
@@ -235,15 +207,14 @@
     const msg = msgEl.value.trim();
     if (!msg) return;
 
+    stopAll();
     setStatus("THINKING...");
     log("YOU: " + msg);
 
     try {
       const r = await fetch(apiBase() + "/v1/realtime/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: msg })
       });
 
@@ -256,22 +227,63 @@
       }
 
       log("CONSIA: " + j.reply);
-      setStatus("SPEAKING...");
-      speakText(j.reply, j.visemes || []);
-
-      setTimeout(() => {
-        setStatus(autoMode ? "AUTO READY" : "READY");
-      }, 300);
+      await playAudioAndLipSync(j.audio_base64, j.audio_mime, j.visemes || []);
+      setStatus(autoMode ? "AUTO READY" : "READY");
     } catch (e) {
       setStatus("ERROR");
       log("ERROR SEND: " + e);
     }
   }
 
+  async function playAudioAndLipSync(base64, mime, visemes) {
+    return new Promise((resolve, reject) => {
+      const audio = new Audio(`data:${mime};base64,${base64}`);
+      currentAudio = audio;
+
+      audio.onloadedmetadata = () => {
+        const durationMs = Math.max(400, audio.duration * 1000);
+        const step = Math.max(50, durationMs / Math.max(1, visemes.length));
+
+        let i = 0;
+        lipsyncTimer = setInterval(() => {
+          if (i < visemes.length) {
+            mouth = visemes[i];
+            i++;
+          } else {
+            mouth = "S";
+          }
+        }, step);
+      };
+
+      audio.onended = () => {
+        mouth = "S";
+        if (lipsyncTimer) {
+          clearInterval(lipsyncTimer);
+          lipsyncTimer = null;
+        }
+        currentAudio = null;
+        resolve();
+      };
+
+      audio.onerror = () => {
+        mouth = "S";
+        if (lipsyncTimer) {
+          clearInterval(lipsyncTimer);
+          lipsyncTimer = null;
+        }
+        currentAudio = null;
+        reject(new Error("audio_playback_failed"));
+      };
+
+      audio.play().catch(reject);
+      setStatus("SPEAKING...");
+    });
+  }
+
   function makeRecognizer() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
-      log("Este navegador no soporta SpeechRecognition.");
+      log("SpeechRecognition no disponible en este navegador.");
       return null;
     }
 
@@ -281,18 +293,15 @@
     r.continuous = false;
 
     r.onstart = () => setStatus(autoMode ? "AUTO LISTENING..." : "LISTENING...");
-
     r.onresult = (e) => {
       const text = e.results[0][0].transcript;
       msgEl.value = text;
       send();
     };
-
     r.onerror = (e) => {
       log("MIC ERROR: " + (e.error || "unknown"));
       setStatus("MIC ERROR");
     };
-
     r.onend = () => {
       if (autoMode) {
         setTimeout(() => {
@@ -319,22 +328,17 @@
   function toggleAuto() {
     autoMode = !autoMode;
     if (autoMode) {
-      setStatus("AUTO READY");
       log("AUTO MODE ON");
+      setStatus("AUTO READY");
       mic(true);
     } else {
-      setStatus("READY");
       log("AUTO MODE OFF");
-      try { if (recognizer) recognizer.stop(); } catch {}
+      try {
+        if (recognizer) recognizer.stop();
+      } catch {}
+      setStatus("READY");
     }
   }
-
-  // warmup voices
-  if ("speechSynthesis" in window) {
-    window.speechSynthesis.onvoiceschanged = () => {};
-  }
-
-  drawAvatar();
 </script>
 </body>
 </html>
