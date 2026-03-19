@@ -2,12 +2,10 @@ name = "consia-avatar-os"
 main = "worker.js"
 compatibility_date = "2026-01-01"
 
-# ===== R2 =====
 [[r2_buckets]]
 binding = "AVATAR_BUCKET"
 bucket_name = "consia-avatars"
 
-# ===== D1 =====
 [[d1_databases]]
 binding = "DB"
 database_name = "consia_d1"
