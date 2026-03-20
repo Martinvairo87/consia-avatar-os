@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>CONSIA REALTIME V3</title>
+<title>CONSIA OWNER PANEL AUTO V4</title>
 <style>
   body{
     margin:0;
     background:#000;
     color:#00ffc8;
-    font-family:Arial, sans-serif;
+    font-family:Arial,sans-serif;
     overflow:hidden;
   }
   video{
@@ -25,59 +25,80 @@
     inset:0;
     z-index:2;
   }
-  #ui{
-    position:absolute;
-    left:0;
-    right:0;
-    bottom:22px;
-    z-index:3;
-    text-align:center;
-  }
-  input{
-    width:min(90vw,760px);
-    padding:12px;
-    border:none;
-    border-radius:10px;
-    margin:0 auto 10px;
-    display:block;
-  }
-  button{
-    padding:14px 20px;
-    margin:4px;
-    font-size:16px;
-    background:#00ffc8;
-    border:none;
-    border-radius:12px;
-    font-weight:700;
-    cursor:pointer;
-  }
   #status{
     position:absolute;
-    top:16px;
-    left:16px;
-    z-index:3;
+    top:14px;
+    left:14px;
+    z-index:4;
     background:rgba(0,0,0,.55);
     color:#fff;
     padding:10px 12px;
     border-radius:10px;
     font-size:14px;
   }
-  #log{
+  #panel{
     position:absolute;
-    top:16px;
-    right:16px;
-    width:min(42vw,420px);
-    max-height:50vh;
+    top:14px;
+    right:14px;
+    width:min(42vw,430px);
+    max-height:90vh;
     overflow:auto;
-    z-index:3;
-    background:rgba(0,0,0,.55);
+    z-index:4;
+    background:rgba(0,0,0,.62);
     color:#fff;
-    padding:10px 12px;
-    border-radius:10px;
-    font-size:12px;
-    white-space:pre-wrap;
+    padding:12px;
+    border-radius:12px;
   }
-  audio{ display:none; }
+  #panel h3{
+    margin:0 0 10px 0;
+    color:#00ffc8;
+  }
+  #ui{
+    position:absolute;
+    left:0;
+    right:0;
+    bottom:18px;
+    z-index:4;
+    text-align:center;
+  }
+  input, select, textarea{
+    width:min(92vw,760px);
+    padding:12px;
+    margin:0 auto 10px;
+    border:none;
+    border-radius:10px;
+    display:block;
+    box-sizing:border-box;
+  }
+  button{
+    padding:13px 18px;
+    margin:4px;
+    font-size:15px;
+    background:#00ffc8;
+    border:none;
+    border-radius:12px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .small{
+    font-size:12px;
+    opacity:.8;
+    margin-bottom:8px;
+  }
+  .card{
+    background:rgba(255,255,255,.06);
+    border-radius:10px;
+    padding:10px;
+    margin-bottom:8px;
+  }
+  .row{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .row button{
+    flex:1 1 auto;
+  }
 </style>
 </head>
 <body>
@@ -87,20 +108,44 @@
 </video>
 
 <canvas id="face"></canvas>
-<audio id="remoteAudio" autoplay playsinline></audio>
 
 <div id="status">READY</div>
-<div id="log"></div>
+
+<div id="panel">
+  <h3>CONSIA OWNER PANEL</h3>
+  <div class="small" id="ownerStats">Cargando...</div>
+
+  <div class="card">
+    <strong>Acciones rápidas</strong>
+    <div class="row" style="margin-top:8px;">
+      <button onclick="runQuickAction('lead_qualify')">Lead</button>
+      <button onclick="runQuickAction('followup_create')">Followup</button>
+      <button onclick="runQuickAction('task_create')">Tarea</button>
+      <button onclick="runQuickAction('property_match')">Propiedad</button>
+      <button onclick="runQuickAction('meeting_summary')">Resumen</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <strong>Historial</strong>
+    <div id="automationList" style="margin-top:8px;"></div>
+  </div>
+</div>
 
 <div id="ui">
   <input id="msg" placeholder="Escribí algo o conectá realtime..." />
-  <button onclick="connectRealtime()">⚡ CONECTAR</button>
-  <button onclick="sendText()">🚀 ENVIAR TEXTO</button>
-  <button onclick="toggleMic()">🎤 MIC</button>
-  <button onclick="toggleAuto()">🧠 AUTO</button>
-  <button onclick="testStatus()">✅ TEST</button>
-  <button onclick="disconnectRealtime()">⏹ STOP</button>
+  <div class="row" style="justify-content:center;">
+    <button onclick="connectRealtime()">⚡ CONECTAR</button>
+    <button onclick="sendText()">🚀 ENVIAR TEXTO</button>
+    <button onclick="toggleMic()">🎤 MIC</button>
+    <button onclick="toggleAuto()">🧠 AUTO</button>
+    <button onclick="testStatus()">✅ TEST</button>
+    <button onclick="refreshOwnerPanel()">📊 PANEL</button>
+    <button onclick="disconnectRealtime()">⏹ STOP</button>
+  </div>
 </div>
+
+<audio id="remoteAudio" autoplay playsinline></audio>
 
 <script>
 const API_BASE = "https://consia-api.jbdkb7r94d.workers.dev";
@@ -109,7 +154,8 @@ const canvas = document.getElementById("face");
 const ctx = canvas.getContext("2d");
 const msgEl = document.getElementById("msg");
 const statusEl = document.getElementById("status");
-const logEl = document.getElementById("log");
+const ownerStatsEl = document.getElementById("ownerStats");
+const automationListEl = document.getElementById("automationList");
 const remoteAudioEl = document.getElementById("remoteAudio");
 
 let pc = null;
@@ -131,10 +177,6 @@ window.addEventListener("resize", () => {
 });
 
 function setStatus(t){ statusEl.innerText = t; }
-function log(t){
-  logEl.innerText += t + "\n";
-  logEl.scrollTop = logEl.scrollHeight;
-}
 
 function drawFace(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -164,29 +206,76 @@ async function testStatus(){
     const r = await fetch(API_BASE + "/v1/status");
     const j = await r.json();
     setStatus(j.ok ? "API OK" : "API ERROR");
-    log(JSON.stringify(j, null, 2));
-  }catch(e){
+  }catch{
     setStatus("API ERROR");
-    log(String(e));
   }
+}
+
+async function refreshOwnerPanel(){
+  try{
+    const dashRes = await fetch(API_BASE + "/v1/owner/dashboard");
+    const dash = await dashRes.json();
+
+    ownerStatsEl.innerText =
+      `Automations: ${dash.stats.automations_total} | KV: ${dash.stats.automation_kv} | Realtime: ${dash.stats.realtime_ready}`;
+
+    const listRes = await fetch(API_BASE + "/v1/automation/list");
+    const list = await listRes.json();
+
+    automationListEl.innerHTML = "";
+    (list.items || []).slice(0, 20).forEach(item => {
+      const div = document.createElement("div");
+      div.className = "card";
+      div.innerHTML = `
+        <div><strong>${item.action}</strong></div>
+        <div style="font-size:12px;opacity:.8;">${new Date(item.created_at).toLocaleString()}</div>
+        <div style="font-size:12px;margin-top:6px;">${JSON.stringify(item.output || {}, null, 2)}</div>
+      `;
+      automationListEl.appendChild(div);
+    });
+  }catch(e){
+    ownerStatsEl.innerText = "Panel error";
+  }
+}
+
+async function runQuickAction(action){
+  let payload = {};
+
+  if (action === "task_create") {
+    payload = { title: "Nueva tarea OWNER desde panel" };
+  } else if (action === "followup_create") {
+    payload = { channel: "whatsapp" };
+  } else if (action === "lead_qualify") {
+    payload = { budget: true, intent: "buy_now" };
+  } else if (action === "property_match") {
+    payload = { zone: "Posadas", type: "departamento" };
+  } else if (action === "meeting_summary") {
+    payload = { meeting: "owner panel" };
+  }
+
+  await fetch(API_BASE + "/v1/automation/dispatch", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ action, payload })
+  });
+
+  refreshOwnerPanel();
 }
 
 async function connectRealtime(){
   if (connected) return;
-
   setStatus("CONNECTING...");
 
   try{
     const sessionRes = await fetch(API_BASE + "/v1/realtime/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({})
     });
 
     const sessionData = await sessionRes.json();
     if (!sessionRes.ok || !sessionData.ok) {
       setStatus("SESSION ERROR");
-      log(JSON.stringify(sessionData, null, 2));
       return;
     }
 
@@ -199,27 +288,18 @@ async function connectRealtime(){
     dc.onopen = () => {
       connected = true;
       setStatus("CONNECTED");
-      log("Realtime data channel open");
     };
 
     dc.onmessage = async (ev) => {
       try{
         const event = JSON.parse(ev.data);
 
-        if (event.type === "error") {
-          log("Realtime error: " + JSON.stringify(event.error || event));
-        }
-
-        if (event.type === "session.created" || event.type === "session.updated") {
-          log(event.type);
-        }
-
         if (event.type === "response.output_item.done" && event.item?.type === "function_call" && event.item?.name === "run_agent_action") {
           const args = JSON.parse(event.item.arguments || "{}");
 
           const toolRes = await fetch(API_BASE + "/v1/automation/dispatch", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+            method:"POST",
+            headers:{ "Content-Type":"application/json" },
             body: JSON.stringify({
               action: args.action,
               payload: args.payload || {}
@@ -238,18 +318,9 @@ async function connectRealtime(){
           }));
 
           dc.send(JSON.stringify({ type: "response.create" }));
+          refreshOwnerPanel();
         }
-      }catch(err){
-        log("DC parse error: " + err);
-      }
-    };
-
-    pc.onconnectionstatechange = () => {
-      log("pc.state=" + pc.connectionState);
-      if (pc.connectionState === "disconnected" || pc.connectionState === "failed" || pc.connectionState === "closed") {
-        connected = false;
-        setStatus("DISCONNECTED");
-      }
+      }catch{}
     };
 
     pc.ontrack = (event) => {
@@ -283,11 +354,6 @@ async function connectRealtime(){
       body: offer.sdp
     });
 
-    if (!sdpRes.ok) {
-      const err = await sdpRes.text();
-      throw new Error(err);
-    }
-
     const answer = {
       type: "answer",
       sdp: await sdpRes.text()
@@ -295,9 +361,8 @@ async function connectRealtime(){
 
     await pc.setRemoteDescription(answer);
     setStatus("CONNECTED");
-  }catch(err){
+  }catch{
     setStatus("CONNECT ERROR");
-    log(String(err));
   }
 }
 
@@ -321,9 +386,7 @@ function setupAudioAnalyser(stream){
       requestAnimationFrame(tick);
     }
     tick();
-  }catch(err){
-    log("Analyser error: " + err);
-  }
+  }catch{}
 }
 
 function sendText(){
@@ -340,9 +403,7 @@ function sendText(){
     item: {
       type: "message",
       role: "user",
-      content: [
-        { type: "input_text", text }
-      ]
+      content: [{ type: "input_text", text }]
     }
   }));
 
@@ -380,6 +441,8 @@ function disconnectRealtime(){
   remoteAudioEl.srcObject = null;
   setStatus("READY");
 }
+
+refreshOwnerPanel();
 </script>
 
 </body>
