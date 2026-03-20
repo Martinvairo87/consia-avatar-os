@@ -1,151 +1,278 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-  <title>CONSIA FULL REAL</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <style>
-    body{
-      margin:0;
-      background:black;
-      overflow:hidden;
-      font-family:Arial;
-    }
-
-    video{
-      position:absolute;
-      width:100%;
-      height:100%;
-      object-fit:cover;
-      z-index:1;
-    }
-
-    canvas{
-      position:absolute;
-      z-index:2;
-    }
-
-    #ui{
-      position:absolute;
-      bottom:30px;
-      width:100%;
-      text-align:center;
-      z-index:3;
-    }
-
-    button{
-      padding:16px 32px;
-      font-size:18px;
-      background:#00ffc8;
-      border:none;
-      border-radius:12px;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CONSIA FULL REAL</title>
+<style>
+  body{
+    margin:0;
+    background:#000;
+    color:#00ffc8;
+    font-family:Arial, sans-serif;
+    overflow:hidden;
+  }
+  video{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    object-fit:cover;
+    z-index:1;
+  }
+  canvas{
+    position:absolute;
+    inset:0;
+    z-index:2;
+  }
+  #ui{
+    position:absolute;
+    left:0;
+    right:0;
+    bottom:24px;
+    z-index:3;
+    text-align:center;
+  }
+  input{
+    width:min(90vw,700px);
+    padding:12px;
+    border:none;
+    border-radius:10px;
+    margin:0 auto 10px;
+    display:block;
+  }
+  button{
+    padding:14px 24px;
+    margin:4px;
+    font-size:16px;
+    background:#00ffc8;
+    border:none;
+    border-radius:12px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  #status{
+    position:absolute;
+    top:18px;
+    left:18px;
+    z-index:3;
+    background:rgba(0,0,0,.5);
+    color:#fff;
+    padding:10px 12px;
+    border-radius:10px;
+    font-size:14px;
+  }
+</style>
 </head>
-
 <body>
 
-<video autoplay muted loop>
-  <source src="https://create-images-results.d-id.com/DefaultPresenters/Noelle.mp4">
+<video autoplay muted loop playsinline>
+  <source src="https://create-images-results.d-id.com/DefaultPresenters/Noelle.mp4" type="video/mp4">
 </video>
 
 <canvas id="face"></canvas>
 
+<div id="status">READY</div>
+
 <div id="ui">
-  <button onclick="startListening()">Hablar con CONSIA</button>
+  <input id="msg" placeholder="Escribí o hablá con CONSIA..." />
+  <button onclick="send()">🚀 ENVIAR</button>
+  <button onclick="startListening()">🎤 HABLAR</button>
+  <button onclick="toggleAuto()">🧠 AUTO</button>
+  <button onclick="testStatus()">⚡ TEST</button>
+  <button onclick="stopAll()">⏹ STOP</button>
 </div>
 
 <script>
+const API_BASE = "https://consia-api.jbdkb7r94d.workers.dev";
 const canvas = document.getElementById("face");
 const ctx = canvas.getContext("2d");
+const msgEl = document.getElementById("msg");
+const statusEl = document.getElementById("status");
 
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-let analyser, dataArray;
+let autoMode = false;
+let recognition = null;
+let currentAudio = null;
+let lipsyncTimer = null;
+let mouth = "S";
 
-// 🎤 MICROFONO
-function startListening(){
-
-  const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-
-  recognition.lang = "es-AR";
-  recognition.start();
-
-  recognition.onresult = async function(event){
-    const text = event.results[0][0].transcript;
-
-    const respuesta = await consultarIA(text);
-
-    reproducir(respuesta);
-  };
+function setStatus(text){
+  statusEl.innerText = text;
 }
 
-// 🧠 IA (CONSIA)
-async function consultarIA(text){
-
-  const res = await fetch("https://consia-api.jbdkb7r94d.workers.dev/v1/chat", {
-    method:"POST",
-    headers:{
-      "Content-Type":"application/json"
-    },
-    body: JSON.stringify({ message:text })
-  });
-
-  const data = await res.json();
-
-  return data.reply || "Estoy activo";
-}
-
-// 🔊 VOZ + SYNC
-function reproducir(text){
-
-  const audio = new Audio(`https://consia-api.jbdkb7r94d.workers.dev/v1/tts?text=${encodeURIComponent(text)}`);
-
-  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const source = audioCtx.createMediaElementSource(audio);
-
-  analyser = audioCtx.createAnalyser();
-  source.connect(analyser);
-  analyser.connect(audioCtx.destination);
-
-  analyser.fftSize = 256;
-  dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-  audio.play();
-
-  animarCara();
-}
-
-// 🎭 ANIMACIÓN
-function animarCara(){
-
-  requestAnimationFrame(animarCara);
-
+function drawFace(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  if(!analyser) return;
+  const cx = canvas.width / 2;
+  const eyeY = canvas.height * 0.45;
+  const mouthY = canvas.height * 0.65;
 
-  analyser.getByteFrequencyData(dataArray);
+  const blink = Math.random() > 0.985 ? 2 : 12;
 
-  let sum = dataArray.reduce((a,b)=>a+b,0);
-  let volume = sum / dataArray.length;
+  // eyes
+  ctx.fillStyle = "white";
+  ctx.fillRect(cx - 80, eyeY, 20, blink);
+  ctx.fillRect(cx + 60, eyeY, 20, blink);
 
-  let cx = canvas.width/2;
-  let cy = canvas.height*0.65;
-
-  // BOCA
+  // mouth
   ctx.fillStyle = "#00ffc8";
   ctx.beginPath();
-  ctx.ellipse(cx, cy, 100, volume*0.5, 0, 0, Math.PI*2);
+
+  if (mouth === "A") ctx.ellipse(cx, mouthY, 95, 28, 0, 0, Math.PI * 2);
+  else if (mouth === "E") ctx.ellipse(cx, mouthY, 105, 14, 0, 0, Math.PI * 2);
+  else if (mouth === "I") ctx.ellipse(cx, mouthY, 20, 40, 0, 0, Math.PI * 2);
+  else if (mouth === "O") ctx.ellipse(cx, mouthY, 50, 32, 0, 0, Math.PI * 2);
+  else if (mouth === "U") ctx.ellipse(cx, mouthY, 36, 28, 0, 0, Math.PI * 2);
+  else if (mouth === "M") ctx.ellipse(cx, mouthY, 85, 8, 0, 0, Math.PI * 2);
+  else if (mouth === "F") ctx.ellipse(cx, mouthY, 80, 5, 0, 0, Math.PI * 2);
+  else ctx.ellipse(cx, mouthY, 80, 6, 0, 0, Math.PI * 2);
+
   ctx.fill();
+  requestAnimationFrame(drawFace);
+}
+drawFace();
 
-  // OJOS
-  let eyeY = canvas.height*0.45;
-  let blink = Math.random() > 0.98 ? 2 : 12;
+async function testStatus(){
+  try{
+    const r = await fetch(API_BASE + "/v1/status");
+    const j = await r.json();
+    setStatus(j.ok ? "API OK" : "API ERROR");
+  }catch{
+    setStatus("API ERROR");
+  }
+}
 
-  ctx.fillStyle = "white";
-  ctx.fillRect(cx-80, eyeY, 20, blink);
-  ctx.fillRect(cx+60, eyeY, 20, blink);
+function stopAll(){
+  if (currentAudio){
+    currentAudio.pause();
+    currentAudio = null;
+  }
+  if (lipsyncTimer){
+    clearInterval(lipsyncTimer);
+    lipsyncTimer = null;
+  }
+  try{
+    if (recognition) recognition.stop();
+  }catch{}
+  mouth = "S";
+  setStatus(autoMode ? "AUTO READY" : "READY");
+}
+
+async function send(){
+  const text = msgEl.value.trim();
+  if(!text) return;
+
+  stopAll();
+  setStatus("THINKING...");
+
+  try{
+    const r = await fetch(API_BASE + "/v1/realtime/chat", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ message:text })
+    });
+
+    const j = await r.json();
+
+    if(!r.ok || j.ok === false){
+      setStatus("ERROR");
+      return;
+    }
+
+    await playAudioAndLipSync(j.audio_base64, j.audio_mime, j.visemes || []);
+    setStatus(autoMode ? "AUTO READY" : "READY");
+  }catch{
+    setStatus("ERROR");
+  }
+}
+
+async function playAudioAndLipSync(base64, mime, visemes){
+  return new Promise((resolve, reject) => {
+    const audio = new Audio(`data:${mime};base64,${base64}`);
+    currentAudio = audio;
+
+    audio.onloadedmetadata = () => {
+      const durationMs = Math.max(500, audio.duration * 1000);
+      const step = Math.max(55, durationMs / Math.max(1, visemes.length));
+
+      let i = 0;
+      lipsyncTimer = setInterval(() => {
+        mouth = i < visemes.length ? visemes[i++] : "S";
+      }, step);
+    };
+
+    audio.onended = () => {
+      mouth = "S";
+      if (lipsyncTimer){
+        clearInterval(lipsyncTimer);
+        lipsyncTimer = null;
+      }
+      currentAudio = null;
+      resolve();
+    };
+
+    audio.onerror = () => {
+      mouth = "S";
+      reject(new Error("audio_error"));
+    };
+
+    setStatus("SPEAKING...");
+    audio.play().catch(reject);
+  });
+}
+
+function makeRecognizer(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){
+    setStatus("MIC NOT SUPPORTED");
+    return null;
+  }
+
+  const r = new SR();
+  r.lang = "es-AR";
+  r.interimResults = false;
+  r.continuous = false;
+
+  r.onstart = () => setStatus(autoMode ? "AUTO LISTENING..." : "LISTENING...");
+  r.onresult = (e) => {
+    const text = e.results[0][0].transcript;
+    msgEl.value = text;
+    send();
+  };
+  r.onerror = () => setStatus("MIC ERROR");
+  r.onend = () => {
+    if (autoMode){
+      setTimeout(() => autoMode && startListening(true), 500);
+    } else {
+      setStatus("READY");
+    }
+  };
+
+  return r;
+}
+
+function startListening(fromAuto = false){
+  recognition = makeRecognizer();
+  if(!recognition) return;
+  try{
+    recognition.start();
+  }catch(e){
+    if(!fromAuto) setStatus("MIC ERROR");
+  }
+}
+
+function toggleAuto(){
+  autoMode = !autoMode;
+  if(autoMode){
+    setStatus("AUTO READY");
+    startListening(true);
+  } else {
+    stopAll();
+    setStatus("READY");
+  }
 }
 </script>
 
