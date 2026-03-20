@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>CONSIA Avatar</title>
+  <title>CONSIA AVATAR</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <style>
     body {
       margin:0;
@@ -10,7 +11,6 @@
       justify-content:center;
       align-items:center;
       height:100vh;
-      color:white;
       font-family:Arial;
     }
     video {
@@ -23,15 +23,16 @@
       bottom:40px;
       padding:15px 30px;
       font-size:18px;
-      background:#00ffcc;
+      background:#00ffc8;
       border:none;
-      border-radius:10px;
+      border-radius:12px;
+      color:black;
     }
   </style>
 </head>
 <body>
 
-<video id="avatar" autoplay muted loop>
+<video autoplay muted loop>
   <source src="https://create-images-results.d-id.com/DefaultPresenters/Noelle.mp4" type="video/mp4">
 </video>
 
@@ -40,7 +41,9 @@
 <script>
 async function hablar() {
 
-  const text = prompt("Texto CONSIA:");
+  const text = prompt("CONSIA:");
+
+  if (!text) return;
 
   const audio = new Audio(`https://consia-api.jbdkb7r94d.workers.dev/v1/tts?text=${encodeURIComponent(text)}`);
 
