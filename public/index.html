@@ -1,17 +1,14 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>CONSIA AVATAR CORE</title>
+  <title>CONSIA ULTRA</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <style>
     body{
       margin:0;
       background:black;
-      display:flex;
-      justify-content:center;
-      align-items:center;
-      height:100vh;
       overflow:hidden;
+      font-family:Arial;
     }
 
     video{
@@ -27,11 +24,16 @@
       z-index:2;
     }
 
-    button{
+    #ui{
       position:absolute;
-      bottom:40px;
+      bottom:30px;
+      width:100%;
+      text-align:center;
       z-index:3;
-      padding:16px 32px;
+    }
+
+    button{
+      padding:14px 28px;
       font-size:18px;
       background:#00ffc8;
       border:none;
@@ -42,32 +44,36 @@
 
 <body>
 
-<!-- Avatar base -->
-<video id="avatar" autoplay muted loop>
-  <source src="https://create-images-results.d-id.com/DefaultPresenters/Noelle.mp4" type="video/mp4">
+<video autoplay muted loop>
+  <source src="https://create-images-results.d-id.com/DefaultPresenters/Noelle.mp4">
 </video>
 
-<!-- Mouth sync -->
-<canvas id="mouth"></canvas>
+<canvas id="face"></canvas>
 
-<button onclick="hablar()">Hablar</button>
+<div id="ui">
+  <button onclick="start()">Hablar</button>
+</div>
 
 <script>
-const canvas = document.getElementById("mouth");
+const canvas = document.getElementById("face");
 const ctx = canvas.getContext("2d");
 
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
 let analyser, dataArray;
+let speaking = false;
 
-async function hablar(){
+async function start(){
 
-  const text = prompt("CONSIA:");
+  const input = prompt("CONSIA:");
 
-  if(!text) return;
+  if(!input) return;
 
-  const audio = new Audio(`https://consia-api.jbdkb7r94d.workers.dev/v1/tts?text=${encodeURIComponent(text)}`);
+  // AUTO RESPUESTA (simulación IA local)
+  const respuesta = generarRespuesta(input);
+
+  const audio = new Audio(`https://consia-api.jbdkb7r94d.workers.dev/v1/tts?text=${encodeURIComponent(respuesta)}`);
 
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   const source = audioCtx.createMediaElementSource(audio);
@@ -79,39 +85,54 @@ async function hablar(){
   analyser.fftSize = 256;
   dataArray = new Uint8Array(analyser.frequencyBinCount);
 
+  speaking = true;
+
   audio.play();
 
-  animateMouth();
+  animarCara();
 }
 
-function animateMouth(){
+function generarRespuesta(text){
+  return "CONSIA responde: " + text;
+}
 
-  requestAnimationFrame(animateMouth);
+function animarCara(){
+
+  requestAnimationFrame(animarCara);
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
   if(!analyser) return;
 
   analyser.getByteFrequencyData(dataArray);
 
-  let sum = 0;
-  for(let i=0;i<dataArray.length;i++){
-    sum += dataArray[i];
-  }
-
+  let sum = dataArray.reduce((a,b)=>a+b,0);
   let volume = sum / dataArray.length;
 
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+  let cx = canvas.width/2;
+  let cy = canvas.height*0.65;
 
-  // POSICIÓN BOCA (ajustable)
-  let x = canvas.width / 2;
-  let y = canvas.height * 0.65;
-
-  let width = 120;
-  let height = volume * 0.4;
-
-  ctx.fillStyle = "rgba(0,255,200,0.8)";
+  // BOCA
+  ctx.fillStyle = "#00ffc8";
   ctx.beginPath();
-  ctx.ellipse(x, y, width, height, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, cy, 100, volume*0.5, 0, 0, Math.PI*2);
   ctx.fill();
+
+  // OJOS
+  let eyeY = canvas.height*0.45;
+  let blink = Math.random() > 0.98 ? 2 : 12;
+
+  ctx.fillStyle = "white";
+  ctx.fillRect(cx-80, eyeY, 20, blink);
+  ctx.fillRect(cx+60, eyeY, 20, blink);
+
+  // EXPRESIÓN dinámica
+  if(volume > 50){
+    ctx.fillStyle = "rgba(0,255,200,0.2)";
+    ctx.beginPath();
+    ctx.arc(cx, cy, 180, 0, Math.PI*2);
+    ctx.fill();
+  }
 }
 </script>
 
