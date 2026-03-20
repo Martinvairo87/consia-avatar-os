@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>CONSIA ULTRA</title>
+  <title>CONSIA FULL REAL</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <style>
     body{
@@ -33,7 +33,7 @@
     }
 
     button{
-      padding:14px 28px;
+      padding:16px 32px;
       font-size:18px;
       background:#00ffc8;
       border:none;
@@ -51,7 +51,7 @@
 <canvas id="face"></canvas>
 
 <div id="ui">
-  <button onclick="start()">Hablar</button>
+  <button onclick="startListening()">Hablar con CONSIA</button>
 </div>
 
 <script>
@@ -62,18 +62,44 @@ canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
 let analyser, dataArray;
-let speaking = false;
 
-async function start(){
+// 🎤 MICROFONO
+function startListening(){
 
-  const input = prompt("CONSIA:");
+  const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
 
-  if(!input) return;
+  recognition.lang = "es-AR";
+  recognition.start();
 
-  // AUTO RESPUESTA (simulación IA local)
-  const respuesta = generarRespuesta(input);
+  recognition.onresult = async function(event){
+    const text = event.results[0][0].transcript;
 
-  const audio = new Audio(`https://consia-api.jbdkb7r94d.workers.dev/v1/tts?text=${encodeURIComponent(respuesta)}`);
+    const respuesta = await consultarIA(text);
+
+    reproducir(respuesta);
+  };
+}
+
+// 🧠 IA (CONSIA)
+async function consultarIA(text){
+
+  const res = await fetch("https://consia-api.jbdkb7r94d.workers.dev/v1/chat", {
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json"
+    },
+    body: JSON.stringify({ message:text })
+  });
+
+  const data = await res.json();
+
+  return data.reply || "Estoy activo";
+}
+
+// 🔊 VOZ + SYNC
+function reproducir(text){
+
+  const audio = new Audio(`https://consia-api.jbdkb7r94d.workers.dev/v1/tts?text=${encodeURIComponent(text)}`);
 
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   const source = audioCtx.createMediaElementSource(audio);
@@ -85,17 +111,12 @@ async function start(){
   analyser.fftSize = 256;
   dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-  speaking = true;
-
   audio.play();
 
   animarCara();
 }
 
-function generarRespuesta(text){
-  return "CONSIA responde: " + text;
-}
-
+// 🎭 ANIMACIÓN
 function animarCara(){
 
   requestAnimationFrame(animarCara);
@@ -125,14 +146,6 @@ function animarCara(){
   ctx.fillStyle = "white";
   ctx.fillRect(cx-80, eyeY, 20, blink);
   ctx.fillRect(cx+60, eyeY, 20, blink);
-
-  // EXPRESIÓN dinámica
-  if(volume > 50){
-    ctx.fillStyle = "rgba(0,255,200,0.2)";
-    ctx.beginPath();
-    ctx.arc(cx, cy, 180, 0, Math.PI*2);
-    ctx.fill();
-  }
 }
 </script>
 
