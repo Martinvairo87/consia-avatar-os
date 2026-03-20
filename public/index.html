@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>CONSIA FULL REAL</title>
+<title>CONSIA REALTIME V3</title>
 <style>
   body{
     margin:0;
@@ -29,12 +29,12 @@
     position:absolute;
     left:0;
     right:0;
-    bottom:24px;
+    bottom:22px;
     z-index:3;
     text-align:center;
   }
   input{
-    width:min(90vw,700px);
+    width:min(90vw,760px);
     padding:12px;
     border:none;
     border-radius:10px;
@@ -42,7 +42,7 @@
     display:block;
   }
   button{
-    padding:14px 24px;
+    padding:14px 20px;
     margin:4px;
     font-size:16px;
     background:#00ffc8;
@@ -53,15 +53,31 @@
   }
   #status{
     position:absolute;
-    top:18px;
-    left:18px;
+    top:16px;
+    left:16px;
     z-index:3;
-    background:rgba(0,0,0,.5);
+    background:rgba(0,0,0,.55);
     color:#fff;
     padding:10px 12px;
     border-radius:10px;
     font-size:14px;
   }
+  #log{
+    position:absolute;
+    top:16px;
+    right:16px;
+    width:min(42vw,420px);
+    max-height:50vh;
+    overflow:auto;
+    z-index:3;
+    background:rgba(0,0,0,.55);
+    color:#fff;
+    padding:10px 12px;
+    border-radius:10px;
+    font-size:12px;
+    white-space:pre-wrap;
+  }
+  audio{ display:none; }
 </style>
 </head>
 <body>
@@ -71,36 +87,53 @@
 </video>
 
 <canvas id="face"></canvas>
+<audio id="remoteAudio" autoplay playsinline></audio>
 
 <div id="status">READY</div>
+<div id="log"></div>
 
 <div id="ui">
-  <input id="msg" placeholder="Escribí o hablá con CONSIA..." />
-  <button onclick="send()">🚀 ENVIAR</button>
-  <button onclick="startListening()">🎤 HABLAR</button>
+  <input id="msg" placeholder="Escribí algo o conectá realtime..." />
+  <button onclick="connectRealtime()">⚡ CONECTAR</button>
+  <button onclick="sendText()">🚀 ENVIAR TEXTO</button>
+  <button onclick="toggleMic()">🎤 MIC</button>
   <button onclick="toggleAuto()">🧠 AUTO</button>
-  <button onclick="testStatus()">⚡ TEST</button>
-  <button onclick="stopAll()">⏹ STOP</button>
+  <button onclick="testStatus()">✅ TEST</button>
+  <button onclick="disconnectRealtime()">⏹ STOP</button>
 </div>
 
 <script>
 const API_BASE = "https://consia-api.jbdkb7r94d.workers.dev";
+
 const canvas = document.getElementById("face");
 const ctx = canvas.getContext("2d");
 const msgEl = document.getElementById("msg");
 const statusEl = document.getElementById("status");
+const logEl = document.getElementById("log");
+const remoteAudioEl = document.getElementById("remoteAudio");
+
+let pc = null;
+let dc = null;
+let localStream = null;
+let autoMode = false;
+let micEnabled = true;
+let analyser = null;
+let audioCtx = null;
+let sourceNode = null;
+let mouthLevel = 0;
+let connected = false;
 
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
+window.addEventListener("resize", () => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+});
 
-let autoMode = false;
-let recognition = null;
-let currentAudio = null;
-let lipsyncTimer = null;
-let mouth = "S";
-
-function setStatus(text){
-  statusEl.innerText = text;
+function setStatus(t){ statusEl.innerText = t; }
+function log(t){
+  logEl.innerText += t + "\n";
+  logEl.scrollTop = logEl.scrollHeight;
 }
 
 function drawFace(){
@@ -110,27 +143,18 @@ function drawFace(){
   const eyeY = canvas.height * 0.45;
   const mouthY = canvas.height * 0.65;
 
-  const blink = Math.random() > 0.985 ? 2 : 12;
+  const blink = Math.random() > 0.986 ? 2 : 12;
 
-  // eyes
   ctx.fillStyle = "white";
   ctx.fillRect(cx - 80, eyeY, 20, blink);
   ctx.fillRect(cx + 60, eyeY, 20, blink);
 
-  // mouth
   ctx.fillStyle = "#00ffc8";
   ctx.beginPath();
-
-  if (mouth === "A") ctx.ellipse(cx, mouthY, 95, 28, 0, 0, Math.PI * 2);
-  else if (mouth === "E") ctx.ellipse(cx, mouthY, 105, 14, 0, 0, Math.PI * 2);
-  else if (mouth === "I") ctx.ellipse(cx, mouthY, 20, 40, 0, 0, Math.PI * 2);
-  else if (mouth === "O") ctx.ellipse(cx, mouthY, 50, 32, 0, 0, Math.PI * 2);
-  else if (mouth === "U") ctx.ellipse(cx, mouthY, 36, 28, 0, 0, Math.PI * 2);
-  else if (mouth === "M") ctx.ellipse(cx, mouthY, 85, 8, 0, 0, Math.PI * 2);
-  else if (mouth === "F") ctx.ellipse(cx, mouthY, 80, 5, 0, 0, Math.PI * 2);
-  else ctx.ellipse(cx, mouthY, 80, 6, 0, 0, Math.PI * 2);
-
+  const mouthHeight = Math.max(8, mouthLevel * 90);
+  ctx.ellipse(cx, mouthY, 95, mouthHeight, 0, 0, Math.PI * 2);
   ctx.fill();
+
   requestAnimationFrame(drawFace);
 }
 drawFace();
@@ -140,139 +164,221 @@ async function testStatus(){
     const r = await fetch(API_BASE + "/v1/status");
     const j = await r.json();
     setStatus(j.ok ? "API OK" : "API ERROR");
-  }catch{
+    log(JSON.stringify(j, null, 2));
+  }catch(e){
     setStatus("API ERROR");
+    log(String(e));
   }
 }
 
-function stopAll(){
-  if (currentAudio){
-    currentAudio.pause();
-    currentAudio = null;
-  }
-  if (lipsyncTimer){
-    clearInterval(lipsyncTimer);
-    lipsyncTimer = null;
-  }
-  try{
-    if (recognition) recognition.stop();
-  }catch{}
-  mouth = "S";
-  setStatus(autoMode ? "AUTO READY" : "READY");
-}
+async function connectRealtime(){
+  if (connected) return;
 
-async function send(){
-  const text = msgEl.value.trim();
-  if(!text) return;
-
-  stopAll();
-  setStatus("THINKING...");
+  setStatus("CONNECTING...");
 
   try{
-    const r = await fetch(API_BASE + "/v1/realtime/chat", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ message:text })
+    const sessionRes = await fetch(API_BASE + "/v1/realtime/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
     });
 
-    const j = await r.json();
-
-    if(!r.ok || j.ok === false){
-      setStatus("ERROR");
+    const sessionData = await sessionRes.json();
+    if (!sessionRes.ok || !sessionData.ok) {
+      setStatus("SESSION ERROR");
+      log(JSON.stringify(sessionData, null, 2));
       return;
     }
 
-    await playAudioAndLipSync(j.audio_base64, j.audio_mime, j.visemes || []);
-    setStatus(autoMode ? "AUTO READY" : "READY");
-  }catch{
-    setStatus("ERROR");
-  }
-}
+    const ephemeralKey = sessionData.client_secret.value;
+    const model = sessionData.model;
 
-async function playAudioAndLipSync(base64, mime, visemes){
-  return new Promise((resolve, reject) => {
-    const audio = new Audio(`data:${mime};base64,${base64}`);
-    currentAudio = audio;
+    pc = new RTCPeerConnection();
+    dc = pc.createDataChannel("oai-events");
 
-    audio.onloadedmetadata = () => {
-      const durationMs = Math.max(500, audio.duration * 1000);
-      const step = Math.max(55, durationMs / Math.max(1, visemes.length));
-
-      let i = 0;
-      lipsyncTimer = setInterval(() => {
-        mouth = i < visemes.length ? visemes[i++] : "S";
-      }, step);
+    dc.onopen = () => {
+      connected = true;
+      setStatus("CONNECTED");
+      log("Realtime data channel open");
     };
 
-    audio.onended = () => {
-      mouth = "S";
-      if (lipsyncTimer){
-        clearInterval(lipsyncTimer);
-        lipsyncTimer = null;
+    dc.onmessage = async (ev) => {
+      try{
+        const event = JSON.parse(ev.data);
+
+        if (event.type === "error") {
+          log("Realtime error: " + JSON.stringify(event.error || event));
+        }
+
+        if (event.type === "session.created" || event.type === "session.updated") {
+          log(event.type);
+        }
+
+        if (event.type === "response.output_item.done" && event.item?.type === "function_call" && event.item?.name === "run_agent_action") {
+          const args = JSON.parse(event.item.arguments || "{}");
+
+          const toolRes = await fetch(API_BASE + "/v1/automation/dispatch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: args.action,
+              payload: args.payload || {}
+            })
+          });
+
+          const toolData = await toolRes.json();
+
+          dc.send(JSON.stringify({
+            type: "conversation.item.create",
+            item: {
+              type: "function_call_output",
+              call_id: event.item.call_id,
+              output: JSON.stringify(toolData)
+            }
+          }));
+
+          dc.send(JSON.stringify({ type: "response.create" }));
+        }
+      }catch(err){
+        log("DC parse error: " + err);
       }
-      currentAudio = null;
-      resolve();
     };
 
-    audio.onerror = () => {
-      mouth = "S";
-      reject(new Error("audio_error"));
+    pc.onconnectionstatechange = () => {
+      log("pc.state=" + pc.connectionState);
+      if (pc.connectionState === "disconnected" || pc.connectionState === "failed" || pc.connectionState === "closed") {
+        connected = false;
+        setStatus("DISCONNECTED");
+      }
     };
 
-    setStatus("SPEAKING...");
-    audio.play().catch(reject);
-  });
-}
+    pc.ontrack = (event) => {
+      remoteAudioEl.srcObject = event.streams[0];
+      setupAudioAnalyser(event.streams[0]);
+      setStatus("SPEAKING READY");
+    };
 
-function makeRecognizer(){
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SR){
-    setStatus("MIC NOT SUPPORTED");
-    return null;
-  }
+    localStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
+    });
 
-  const r = new SR();
-  r.lang = "es-AR";
-  r.interimResults = false;
-  r.continuous = false;
-
-  r.onstart = () => setStatus(autoMode ? "AUTO LISTENING..." : "LISTENING...");
-  r.onresult = (e) => {
-    const text = e.results[0][0].transcript;
-    msgEl.value = text;
-    send();
-  };
-  r.onerror = () => setStatus("MIC ERROR");
-  r.onend = () => {
-    if (autoMode){
-      setTimeout(() => autoMode && startListening(true), 500);
-    } else {
-      setStatus("READY");
+    for (const track of localStream.getTracks()) {
+      track.enabled = micEnabled;
+      pc.addTrack(track, localStream);
     }
-  };
 
-  return r;
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    const sdpRes = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${ephemeralKey}`,
+        "Content-Type": "application/sdp"
+      },
+      body: offer.sdp
+    });
+
+    if (!sdpRes.ok) {
+      const err = await sdpRes.text();
+      throw new Error(err);
+    }
+
+    const answer = {
+      type: "answer",
+      sdp: await sdpRes.text()
+    };
+
+    await pc.setRemoteDescription(answer);
+    setStatus("CONNECTED");
+  }catch(err){
+    setStatus("CONNECT ERROR");
+    log(String(err));
+  }
 }
 
-function startListening(fromAuto = false){
-  recognition = makeRecognizer();
-  if(!recognition) return;
+function setupAudioAnalyser(stream){
   try{
-    recognition.start();
-  }catch(e){
-    if(!fromAuto) setStatus("MIC ERROR");
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    sourceNode = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    sourceNode.connect(analyser);
+
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    function tick(){
+      if (analyser){
+        analyser.getByteFrequencyData(data);
+        const avg = data.reduce((a,b)=>a+b,0) / data.length;
+        mouthLevel = Math.max(0.08, avg / 255);
+      } else {
+        mouthLevel = 0;
+      }
+      requestAnimationFrame(tick);
+    }
+    tick();
+  }catch(err){
+    log("Analyser error: " + err);
   }
+}
+
+function sendText(){
+  if (!dc || dc.readyState !== "open") {
+    setStatus("NOT CONNECTED");
+    return;
+  }
+
+  const text = msgEl.value.trim();
+  if (!text) return;
+
+  dc.send(JSON.stringify({
+    type: "conversation.item.create",
+    item: {
+      type: "message",
+      role: "user",
+      content: [
+        { type: "input_text", text }
+      ]
+    }
+  }));
+
+  dc.send(JSON.stringify({ type: "response.create" }));
+  msgEl.value = "";
+  setStatus("TEXT SENT");
+}
+
+function toggleMic(){
+  micEnabled = !micEnabled;
+  if (localStream){
+    for (const track of localStream.getAudioTracks()) {
+      track.enabled = micEnabled;
+    }
+  }
+  setStatus(micEnabled ? "MIC ON" : "MIC OFF");
 }
 
 function toggleAuto(){
   autoMode = !autoMode;
-  if(autoMode){
-    setStatus("AUTO READY");
-    startListening(true);
-  } else {
-    stopAll();
-    setStatus("READY");
+  setStatus(autoMode ? "AUTO ON" : "AUTO OFF");
+}
+
+function disconnectRealtime(){
+  connected = false;
+  mouthLevel = 0;
+  if (dc) { try{ dc.close(); }catch{} dc = null; }
+  if (pc) { try{ pc.close(); }catch{} pc = null; }
+  if (localStream) {
+    for (const t of localStream.getTracks()) t.stop();
+    localStream = null;
   }
+  if (sourceNode) { try{ sourceNode.disconnect(); }catch{} sourceNode = null; }
+  if (analyser) { try{ analyser.disconnect(); }catch{} analyser = null; }
+  remoteAudioEl.srcObject = null;
+  setStatus("READY");
 }
 </script>
 
