@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>CONSIA OWNER PANEL AUTO V4</title>
+<title>CONSIA OWNER PANEL FINAL</title>
 <style>
   body{
     margin:0;
@@ -61,7 +61,7 @@
     z-index:4;
     text-align:center;
   }
-  input, select, textarea{
+  input{
     width:min(92vw,760px);
     padding:12px;
     margin:0 auto 10px;
@@ -95,9 +95,7 @@
     display:flex;
     gap:8px;
     flex-wrap:wrap;
-  }
-  .row button{
-    flex:1 1 auto;
+    justify-content:center;
   }
 </style>
 </head>
@@ -108,6 +106,7 @@
 </video>
 
 <canvas id="face"></canvas>
+<audio id="remoteAudio" autoplay playsinline></audio>
 
 <div id="status">READY</div>
 
@@ -134,7 +133,7 @@
 
 <div id="ui">
   <input id="msg" placeholder="Escribí algo o conectá realtime..." />
-  <div class="row" style="justify-content:center;">
+  <div class="row">
     <button onclick="connectRealtime()">⚡ CONECTAR</button>
     <button onclick="sendText()">🚀 ENVIAR TEXTO</button>
     <button onclick="toggleMic()">🎤 MIC</button>
@@ -144,8 +143,6 @@
     <button onclick="disconnectRealtime()">⏹ STOP</button>
   </div>
 </div>
-
-<audio id="remoteAudio" autoplay playsinline></audio>
 
 <script>
 const API_BASE = "https://consia-api.jbdkb7r94d.workers.dev";
@@ -229,11 +226,11 @@ async function refreshOwnerPanel(){
       div.innerHTML = `
         <div><strong>${item.action}</strong></div>
         <div style="font-size:12px;opacity:.8;">${new Date(item.created_at).toLocaleString()}</div>
-        <div style="font-size:12px;margin-top:6px;">${JSON.stringify(item.output || {}, null, 2)}</div>
+        <div style="font-size:12px;margin-top:6px;white-space:pre-wrap;">${JSON.stringify(item.output || {}, null, 2)}</div>
       `;
       automationListEl.appendChild(div);
     });
-  }catch(e){
+  }catch{
     ownerStatsEl.innerText = "Panel error";
   }
 }
