@@ -1,344 +1,53 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>CONSIA TTS V3</title>
-<style>
-  body{
-    margin:0;
-    background:#000;
-    color:#00ffc8;
-    font-family:monospace;
-    text-align:center;
-  }
-  .wrap{
-    max-width:900px;
-    margin:0 auto;
-    padding:20px 16px 40px;
-  }
-  canvas{
-    margin-top:16px;
-    background:#001f1b;
-    border-radius:24px;
-    box-shadow:0 0 30px #00ffc833;
-    max-width:100%;
-    height:auto;
-  }
-  input{
-    width:min(92vw,760px);
-    padding:12px;
-    margin:8px auto;
-    background:#001f1b;
-    border:1px solid #00ffc8;
-    color:#00ffc8;
-    border-radius:10px;
-    display:block;
-  }
-  button{
-    padding:12px 16px;
-    margin:6px;
-    background:#00ffc8;
-    border:none;
-    border-radius:10px;
-    font-weight:700;
-    cursor:pointer;
-  }
-  #status{
-    margin:14px 0 6px;
-    font-size:18px;
-  }
-  #log{
-    margin:14px auto 0;
-    width:min(92vw,760px);
-    height:190px;
-    overflow:auto;
-    background:#001f1b;
-    border-radius:12px;
-    padding:12px;
-    text-align:left;
-    box-sizing:border-box;
-  }
-</style>
+  <title>CONSIA Avatar</title>
+  <style>
+    body {
+      margin:0;
+      background:black;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      height:100vh;
+      color:white;
+      font-family:Arial;
+    }
+    video {
+      width:100%;
+      height:100%;
+      object-fit:cover;
+    }
+    button {
+      position:absolute;
+      bottom:40px;
+      padding:15px 30px;
+      font-size:18px;
+      background:#00ffcc;
+      border:none;
+      border-radius:10px;
+    }
+  </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>CONSIA</h1>
-    <canvas id="avatar" width="360" height="360"></canvas>
 
-    <div id="status">READY</div>
+<video id="avatar" autoplay muted loop>
+  <source src="https://create-images-results.d-id.com/DefaultPresenters/Noelle.mp4" type="video/mp4">
+</video>
 
-    <input id="api" value="https://consia-api.jbdkb7r94d.workers.dev" />
-    <input id="msg" placeholder="Escribí o hablá con CONSIA..." />
-
-    <div>
-      <button onclick="send()">🚀 ENVIAR</button>
-      <button onclick="mic()">🎤 HABLAR</button>
-      <button onclick="toggleAuto()">🧠 AUTO</button>
-      <button onclick="testApi()">⚡ TEST</button>
-      <button onclick="stopAll()">⏹ STOP</button>
-    </div>
-
-    <div id="log"></div>
-  </div>
+<button onclick="hablar()">Hablar</button>
 
 <script>
-  const canvas = document.getElementById("avatar");
-  const ctx = canvas.getContext("2d");
-  const logEl = document.getElementById("log");
-  const statusEl = document.getElementById("status");
-  const msgEl = document.getElementById("msg");
-  const apiEl = document.getElementById("api");
+async function hablar() {
 
-  let mouth = "S";
-  let autoMode = false;
-  let recognizer = null;
-  let currentAudio = null;
-  let lipsyncTimer = null;
+  const text = prompt("Texto CONSIA:");
 
-  function apiBase() {
-    return apiEl.value.trim().replace(/\/+$/, "");
-  }
+  const audio = new Audio(`https://consia-api.jbdkb7r94d.workers.dev/v1/tts?text=${encodeURIComponent(text)}`);
 
-  function setStatus(t) {
-    statusEl.innerText = t;
-  }
+  audio.play();
 
-  function log(t) {
-    logEl.innerHTML += escapeHtml(t) + "<br>";
-    logEl.scrollTop = logEl.scrollHeight;
-  }
-
-  function escapeHtml(str) {
-    return String(str)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;");
-  }
-
-  function roundRect(ctx, x, y, w, h, r) {
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
-  }
-
-  function drawAvatar() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    ctx.fillStyle = "#002f2a";
-    ctx.beginPath();
-    ctx.arc(180, 180, 150, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = "#00ffc8";
-    ctx.beginPath();
-    ctx.arc(180, 175, 125, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = "#000";
-    ctx.beginPath(); ctx.arc(130, 140, 11, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(230, 140, 11, 0, Math.PI * 2); ctx.fill();
-
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = "#003f3a";
-    ctx.beginPath();
-    ctx.moveTo(108, 118); ctx.lineTo(148, 112);
-    ctx.moveTo(212, 112); ctx.lineTo(252, 118);
-    ctx.stroke();
-
-    ctx.fillStyle = "#000";
-    ctx.beginPath();
-
-    if (mouth === "A") {
-      ctx.ellipse(180, 235, 28, 22, 0, 0, Math.PI * 2);
-    } else if (mouth === "E") {
-      ctx.ellipse(180, 235, 34, 10, 0, 0, Math.PI * 2);
-    } else if (mouth === "I") {
-      ctx.ellipse(180, 235, 10, 28, 0, 0, Math.PI * 2);
-    } else if (mouth === "O") {
-      ctx.ellipse(180, 235, 20, 20, 0, 0, Math.PI * 2);
-    } else if (mouth === "U") {
-      ctx.ellipse(180, 235, 14, 18, 0, 0, Math.PI * 2);
-    } else if (mouth === "M") {
-      roundRect(ctx, 145, 228, 70, 12, 6);
-    } else if (mouth === "F") {
-      roundRect(ctx, 146, 232, 68, 8, 4);
-    } else {
-      roundRect(ctx, 145, 232, 70, 8, 4);
-    }
-
-    ctx.fill();
-  }
-
-  setInterval(drawAvatar, 30);
-
-  function stopAll() {
-    mouth = "S";
-    if (currentAudio) {
-      currentAudio.pause();
-      currentAudio = null;
-    }
-    if (lipsyncTimer) {
-      clearInterval(lipsyncTimer);
-      lipsyncTimer = null;
-    }
-    try {
-      if (recognizer) recognizer.stop();
-    } catch {}
-    setStatus(autoMode ? "AUTO READY" : "READY");
-  }
-
-  async function testApi() {
-    try {
-      const r = await fetch(apiBase() + "/v1/status");
-      const j = await r.json();
-      setStatus("API OK");
-      log("STATUS: " + JSON.stringify(j));
-    } catch (e) {
-      setStatus("API ERROR");
-      log("ERROR TEST: " + e);
-    }
-  }
-
-  async function send() {
-    const msg = msgEl.value.trim();
-    if (!msg) return;
-
-    stopAll();
-    setStatus("THINKING...");
-    log("YOU: " + msg);
-
-    try {
-      const r = await fetch(apiBase() + "/v1/realtime/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg })
-      });
-
-      const j = await r.json();
-
-      if (!r.ok || j.ok === false) {
-        setStatus("ERROR");
-        log("API ERROR: " + JSON.stringify(j));
-        return;
-      }
-
-      log("CONSIA: " + j.reply);
-      await playAudioAndLipSync(j.audio_base64, j.audio_mime, j.visemes || []);
-      setStatus(autoMode ? "AUTO READY" : "READY");
-    } catch (e) {
-      setStatus("ERROR");
-      log("ERROR SEND: " + e);
-    }
-  }
-
-  async function playAudioAndLipSync(base64, mime, visemes) {
-    return new Promise((resolve, reject) => {
-      const audio = new Audio(`data:${mime};base64,${base64}`);
-      currentAudio = audio;
-
-      audio.onloadedmetadata = () => {
-        const durationMs = Math.max(400, audio.duration * 1000);
-        const step = Math.max(50, durationMs / Math.max(1, visemes.length));
-
-        let i = 0;
-        lipsyncTimer = setInterval(() => {
-          if (i < visemes.length) {
-            mouth = visemes[i];
-            i++;
-          } else {
-            mouth = "S";
-          }
-        }, step);
-      };
-
-      audio.onended = () => {
-        mouth = "S";
-        if (lipsyncTimer) {
-          clearInterval(lipsyncTimer);
-          lipsyncTimer = null;
-        }
-        currentAudio = null;
-        resolve();
-      };
-
-      audio.onerror = () => {
-        mouth = "S";
-        if (lipsyncTimer) {
-          clearInterval(lipsyncTimer);
-          lipsyncTimer = null;
-        }
-        currentAudio = null;
-        reject(new Error("audio_playback_failed"));
-      };
-
-      audio.play().catch(reject);
-      setStatus("SPEAKING...");
-    });
-  }
-
-  function makeRecognizer() {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) {
-      log("SpeechRecognition no disponible en este navegador.");
-      return null;
-    }
-
-    const r = new SR();
-    r.lang = "es-AR";
-    r.interimResults = false;
-    r.continuous = false;
-
-    r.onstart = () => setStatus(autoMode ? "AUTO LISTENING..." : "LISTENING...");
-    r.onresult = (e) => {
-      const text = e.results[0][0].transcript;
-      msgEl.value = text;
-      send();
-    };
-    r.onerror = (e) => {
-      log("MIC ERROR: " + (e.error || "unknown"));
-      setStatus("MIC ERROR");
-    };
-    r.onend = () => {
-      if (autoMode) {
-        setTimeout(() => {
-          if (autoMode) mic(true);
-        }, 500);
-      } else {
-        setStatus("READY");
-      }
-    };
-
-    return r;
-  }
-
-  function mic(fromAuto = false) {
-    recognizer = makeRecognizer();
-    if (!recognizer) return;
-    try {
-      recognizer.start();
-    } catch (e) {
-      if (!fromAuto) log("No se pudo iniciar mic: " + e);
-    }
-  }
-
-  function toggleAuto() {
-    autoMode = !autoMode;
-    if (autoMode) {
-      log("AUTO MODE ON");
-      setStatus("AUTO READY");
-      mic(true);
-    } else {
-      log("AUTO MODE OFF");
-      try {
-        if (recognizer) recognizer.stop();
-      } catch {}
-      setStatus("READY");
-    }
-  }
+}
 </script>
+
 </body>
 </html>
