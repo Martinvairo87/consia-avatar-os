@@ -1,54 +1,117 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>CONSIA AVATAR</title>
+  <title>CONSIA AVATAR CORE</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <style>
-    body {
+    body{
       margin:0;
       background:black;
       display:flex;
       justify-content:center;
       align-items:center;
       height:100vh;
-      font-family:Arial;
+      overflow:hidden;
     }
-    video {
+
+    video{
+      position:absolute;
       width:100%;
       height:100%;
       object-fit:cover;
+      z-index:1;
     }
-    button {
+
+    canvas{
+      position:absolute;
+      z-index:2;
+    }
+
+    button{
       position:absolute;
       bottom:40px;
-      padding:15px 30px;
+      z-index:3;
+      padding:16px 32px;
       font-size:18px;
       background:#00ffc8;
       border:none;
       border-radius:12px;
-      color:black;
     }
   </style>
 </head>
+
 <body>
 
-<video autoplay muted loop>
+<!-- Avatar base -->
+<video id="avatar" autoplay muted loop>
   <source src="https://create-images-results.d-id.com/DefaultPresenters/Noelle.mp4" type="video/mp4">
 </video>
+
+<!-- Mouth sync -->
+<canvas id="mouth"></canvas>
 
 <button onclick="hablar()">Hablar</button>
 
 <script>
-async function hablar() {
+const canvas = document.getElementById("mouth");
+const ctx = canvas.getContext("2d");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let analyser, dataArray;
+
+async function hablar(){
 
   const text = prompt("CONSIA:");
 
-  if (!text) return;
+  if(!text) return;
 
   const audio = new Audio(`https://consia-api.jbdkb7r94d.workers.dev/v1/tts?text=${encodeURIComponent(text)}`);
 
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const source = audioCtx.createMediaElementSource(audio);
+
+  analyser = audioCtx.createAnalyser();
+  source.connect(analyser);
+  analyser.connect(audioCtx.destination);
+
+  analyser.fftSize = 256;
+  dataArray = new Uint8Array(analyser.frequencyBinCount);
+
   audio.play();
 
+  animateMouth();
+}
+
+function animateMouth(){
+
+  requestAnimationFrame(animateMouth);
+
+  if(!analyser) return;
+
+  analyser.getByteFrequencyData(dataArray);
+
+  let sum = 0;
+  for(let i=0;i<dataArray.length;i++){
+    sum += dataArray[i];
+  }
+
+  let volume = sum / dataArray.length;
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // POSICIÓN BOCA (ajustable)
+  let x = canvas.width / 2;
+  let y = canvas.height * 0.65;
+
+  let width = 120;
+  let height = volume * 0.4;
+
+  ctx.fillStyle = "rgba(0,255,200,0.8)";
+  ctx.beginPath();
+  ctx.ellipse(x, y, width, height, 0, 0, Math.PI * 2);
+  ctx.fill();
 }
 </script>
 
