@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>CONSIA OWNER PANEL FINAL</title>
+<title>CONSIA OWNER PANEL CRM V5</title>
 <style>
   body{
     margin:0;
@@ -40,11 +40,11 @@
     position:absolute;
     top:14px;
     right:14px;
-    width:min(42vw,430px);
-    max-height:90vh;
+    width:min(44vw,460px);
+    max-height:92vh;
     overflow:auto;
     z-index:4;
-    background:rgba(0,0,0,.62);
+    background:rgba(0,0,0,.68);
     color:#fff;
     padding:12px;
     border-radius:12px;
@@ -61,7 +61,7 @@
     z-index:4;
     text-align:center;
   }
-  input{
+  input, textarea{
     width:min(92vw,760px);
     padding:12px;
     margin:0 auto 10px;
@@ -82,7 +82,7 @@
   }
   .small{
     font-size:12px;
-    opacity:.8;
+    opacity:.85;
     margin-bottom:8px;
   }
   .card{
@@ -96,6 +96,20 @@
     gap:8px;
     flex-wrap:wrap;
     justify-content:center;
+  }
+  .row button{
+    flex:1 1 auto;
+  }
+  .title{
+    color:#00ffc8;
+    font-weight:700;
+    margin-bottom:6px;
+  }
+  pre{
+    white-space:pre-wrap;
+    word-break:break-word;
+    font-size:12px;
+    margin:0;
   }
 </style>
 </head>
@@ -111,12 +125,12 @@
 <div id="status">READY</div>
 
 <div id="panel">
-  <h3>CONSIA OWNER PANEL</h3>
+  <h3>CONSIA OWNER PANEL CRM V5</h3>
   <div class="small" id="ownerStats">Cargando...</div>
 
   <div class="card">
-    <strong>Acciones rápidas</strong>
-    <div class="row" style="margin-top:8px;">
+    <div class="title">Acciones rápidas</div>
+    <div class="row">
       <button onclick="runQuickAction('lead_qualify')">Lead</button>
       <button onclick="runQuickAction('followup_create')">Followup</button>
       <button onclick="runQuickAction('task_create')">Tarea</button>
@@ -126,8 +140,28 @@
   </div>
 
   <div class="card">
-    <strong>Historial</strong>
-    <div id="automationList" style="margin-top:8px;"></div>
+    <div class="title">CRM rápido</div>
+    <div class="row">
+      <button onclick="crearLeadTest()">Crear Lead Test</button>
+      <button onclick="listarLeads()">Leads</button>
+      <button onclick="verPipeline()">Pipeline</button>
+      <button onclick="crearFollowupTest()">Followup Test</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="title">Último resultado</div>
+    <pre id="crmOutput">Sin datos</pre>
+  </div>
+
+  <div class="card">
+    <div class="title">Historial automatizaciones</div>
+    <div id="automationList"></div>
+  </div>
+
+  <div class="card">
+    <div class="title">Leads</div>
+    <div id="leadsList"></div>
   </div>
 </div>
 
@@ -153,6 +187,8 @@ const msgEl = document.getElementById("msg");
 const statusEl = document.getElementById("status");
 const ownerStatsEl = document.getElementById("ownerStats");
 const automationListEl = document.getElementById("automationList");
+const leadsListEl = document.getElementById("leadsList");
+const crmOutputEl = document.getElementById("crmOutput");
 const remoteAudioEl = document.getElementById("remoteAudio");
 
 let pc = null;
@@ -165,6 +201,7 @@ let audioCtx = null;
 let sourceNode = null;
 let mouthLevel = 0;
 let connected = false;
+let lastLeadId = null;
 
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
@@ -174,6 +211,10 @@ window.addEventListener("resize", () => {
 });
 
 function setStatus(t){ statusEl.innerText = t; }
+
+function renderJson(el, data){
+  el.textContent = JSON.stringify(data, null, 2);
+}
 
 function drawFace(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -203,8 +244,10 @@ async function testStatus(){
     const r = await fetch(API_BASE + "/v1/status");
     const j = await r.json();
     setStatus(j.ok ? "API OK" : "API ERROR");
-  }catch{
+    renderJson(crmOutputEl, j);
+  }catch(e){
     setStatus("API ERROR");
+    crmOutputEl.textContent = String(e);
   }
 }
 
@@ -214,7 +257,7 @@ async function refreshOwnerPanel(){
     const dash = await dashRes.json();
 
     ownerStatsEl.innerText =
-      `Automations: ${dash.stats.automations_total} | KV: ${dash.stats.automation_kv} | Realtime: ${dash.stats.realtime_ready}`;
+      `Automations: ${dash.stats.automations_total} | KV: ${dash.stats.automation_kv} | Realtime: ${dash.stats.realtime_ready} | Leads: ${dash.stats.leads_total ?? "-"}`;
 
     const listRes = await fetch(API_BASE + "/v1/automation/list");
     const list = await listRes.json();
@@ -226,12 +269,15 @@ async function refreshOwnerPanel(){
       div.innerHTML = `
         <div><strong>${item.action}</strong></div>
         <div style="font-size:12px;opacity:.8;">${new Date(item.created_at).toLocaleString()}</div>
-        <div style="font-size:12px;margin-top:6px;white-space:pre-wrap;">${JSON.stringify(item.output || {}, null, 2)}</div>
+        <pre>${JSON.stringify(item.output || {}, null, 2)}</pre>
       `;
       automationListEl.appendChild(div);
     });
-  }catch{
+
+    await listarLeads(true);
+  }catch(e){
     ownerStatsEl.innerText = "Panel error";
+    crmOutputEl.textContent = String(e);
   }
 }
 
@@ -250,13 +296,86 @@ async function runQuickAction(action){
     payload = { meeting: "owner panel" };
   }
 
-  await fetch(API_BASE + "/v1/automation/dispatch", {
+  const res = await fetch(API_BASE + "/v1/automation/dispatch", {
     method:"POST",
     headers:{ "Content-Type":"application/json" },
     body: JSON.stringify({ action, payload })
   });
 
+  const data = await res.json();
+  renderJson(crmOutputEl, data);
   refreshOwnerPanel();
+}
+
+async function crearLeadTest(){
+  const res = await fetch(API_BASE + "/v1/crm/lead/create", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({
+      name: "Juan Pérez",
+      phone: "3764123456",
+      email: "juan@mail.com",
+      source: "web"
+    })
+  });
+
+  const data = await res.json();
+  if (data?.lead?.id) lastLeadId = data.lead.id;
+  renderJson(crmOutputEl, data);
+  refreshOwnerPanel();
+}
+
+async function listarLeads(silent=false){
+  const res = await fetch(API_BASE + "/v1/crm/lead/list");
+  const data = await res.json();
+
+  leadsListEl.innerHTML = "";
+  (data.leads || []).slice(0, 20).forEach(item => {
+    const div = document.createElement("div");
+    div.className = "card";
+    div.innerHTML = `
+      <div><strong>${item.name}</strong></div>
+      <div style="font-size:12px;opacity:.8;">${item.email} | ${item.phone}</div>
+      <div style="font-size:12px;">status: ${item.status}</div>
+      <div style="font-size:12px;">id: ${item.id}</div>
+    `;
+    leadsListEl.appendChild(div);
+  });
+
+  if (!silent) renderJson(crmOutputEl, data);
+
+  if (data.leads && data.leads.length > 0) {
+    lastLeadId = data.leads[0].id;
+  }
+}
+
+async function verPipeline(){
+  const res = await fetch(API_BASE + "/v1/crm/pipeline");
+  const data = await res.json();
+  renderJson(crmOutputEl, data);
+}
+
+async function crearFollowupTest(){
+  if (!lastLeadId) {
+    await listarLeads(true);
+  }
+
+  if (!lastLeadId) {
+    crmOutputEl.textContent = "No hay lead disponible para followup";
+    return;
+  }
+
+  const res = await fetch(API_BASE + "/v1/crm/followup", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({
+      lead_id: lastLeadId,
+      message: "Seguimiento automático OWNER PANEL"
+    })
+  });
+
+  const data = await res.json();
+  renderJson(crmOutputEl, data);
 }
 
 async function connectRealtime(){
@@ -273,6 +392,7 @@ async function connectRealtime(){
     const sessionData = await sessionRes.json();
     if (!sessionRes.ok || !sessionData.ok) {
       setStatus("SESSION ERROR");
+      renderJson(crmOutputEl, sessionData);
       return;
     }
 
@@ -358,8 +478,9 @@ async function connectRealtime(){
 
     await pc.setRemoteDescription(answer);
     setStatus("CONNECTED");
-  }catch{
+  }catch(e){
     setStatus("CONNECT ERROR");
+    crmOutputEl.textContent = String(e);
   }
 }
 
